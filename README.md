@@ -147,7 +147,7 @@ Title: PROJ-123: Implement user authentication
 
 ## Requirements
 
-- Node.js 16.0.0 or higher
+- Node.js 18.0.0 or higher
 - Git repository
 - Jira account with API access
 - GitHub account with repository access

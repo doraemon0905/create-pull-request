@@ -98,7 +98,7 @@ For manual publish workflow, you can create a `production` environment:
 # Runs on multiple Node.js versions
 strategy:
   matrix:
-    node-version: [16, 18, 20]
+    node-version: [18, 20, 22]
 
 # Tests on multiple operating systems  
 strategy:
@@ -286,7 +286,7 @@ Customize testing matrices:
 ```yaml
 strategy:
   matrix:
-    node-version: [16, 18, 20, 21]  # Add Node 21
+    node-version: [18, 20, 22, 21]  # Add Node 21
     os: [ubuntu-latest, macos-latest]  # Remove Windows
 ```
 

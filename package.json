@@ -8,9 +8,9 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "npx ts-node src/index.ts",
-    "lint": "npx eslint src/**/*.ts",
-    "test": "npx jest",
+    "dev": "ts-node src/index.ts",
+    "lint": "eslint src/**/*.ts",
+    "test": "jest",
     "prepare": "npm run build",
     "prepublishOnly": "npm run lint && npm run build && npm run test",
     "version:patch": "./scripts/version.sh patch",
@@ -55,6 +55,6 @@
     "typescript": "^5.2.2"
   },
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=18.0.0"
   }
 }

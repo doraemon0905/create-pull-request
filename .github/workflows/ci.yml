@@ -16,7 +16,7 @@ jobs:
     
     strategy:
       matrix:
-        node-version: [16, 18, 20]  # Test multiple Node.js versions
+        node-version: [18, 20, 22]  # Test multiple Node.js versions
     
     steps:
       - name: 🔍 Checkout code
@@ -38,7 +38,7 @@ jobs:
           
           # Check for security issues in dependencies
           npm audit --audit-level=moderate
-        continue-on-error: ${{ matrix.node-version != 18 }}  # Only fail on primary version
+        continue-on-error: ${{ matrix.node-version != 20 }}  # Only fail on primary version
       
       - name: 📝 Run ESLint
         run: npm run lint
@@ -131,7 +131,7 @@ jobs:
           fi
       
       - name: 📦 Test packaging
-        if: matrix.node-version == 18  # Only test on primary version
+        if: matrix.node-version == 20  # Only test on primary version
         run: |
           echo "📦 Testing npm pack..."
           npm pack --dry-run > pack-output.txt
@@ -173,7 +173,7 @@ jobs:
       - name: 🔧 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
       
       - name: 📦 Install dependencies
@@ -220,7 +220,7 @@ jobs:
       - name: 🔧 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
       
       - name: 📦 Install dependencies
@@ -267,7 +267,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node-version: [18]
+        node-version: [20]
     
     steps:
       - name: 🔍 Checkout code
