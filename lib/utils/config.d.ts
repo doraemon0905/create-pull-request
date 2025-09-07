@@ -19,7 +19,7 @@ export interface EnvironmentConfig {
     version: string;
 }
 /**
- * Load configuration from JSON file with fallback to .env file
+ * Load configuration from JSON file
  */
 export declare function loadConfig(): EnvironmentConfig;
 /**
