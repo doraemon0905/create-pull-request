@@ -171,6 +171,7 @@ jobs:
         run: |
           echo "🚀 LIVE PUBLISH MODE"
           echo "==================="
+          echo "⚠️ Note: Ensure NPM_TOKEN is an Automation token to bypass 2FA"
           
           PACKAGE_NAME=$(node -p "require('./package.json').name")
           TAG="${{ github.event.inputs.tag }}"

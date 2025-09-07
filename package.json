@@ -1,5 +1,5 @@
 {
-  "name": "create-pull-request",
+  "name": "giangbeo91/create-pull-request",
   "version": "1.0.0",
   "description": "CLI tool to automatically generate pull request descriptions based on Jira tickets and file changes using GitHub Copilot API",
   "main": "lib/index.js",
