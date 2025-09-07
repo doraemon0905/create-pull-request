@@ -253,8 +253,8 @@ npm audit
 
 After successful publishing:
 
-- [ ] ✅ Verify package on npmjs.com: `https://www.npmjs.com/package/create-pull-request`
-- [ ] ✅ Test installation: `npm install -g create-pull-request@latest`
+- [ ] ✅ Verify package on npmjs.com: `https://www.npmjs.com/package/publish-pull-request`
+- [ ] ✅ Test installation: `npm install -g publish-pull-request@latest`
 - [ ] ✅ Test functionality: `create-pr --help`
 - [ ] ✅ Update GitHub release page
 - [ ] ✅ Update documentation if needed

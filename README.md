@@ -16,13 +16,13 @@ A CLI tool that automatically generates pull request descriptions based on Jira 
 ### Global Installation
 
 ```bash
-npm install -g create-pull-request
+npm install -g publish-pull-request
 ```
 
 ### Local Installation
 
 ```bash
-npm install create-pull-request
+npm install publish-pull-request
 ```
 
 ## Setup

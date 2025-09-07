@@ -125,7 +125,7 @@ jobs:
             
             ### Installation
             ```bash
-            npm install -g create-pull-request@${{ env.NEW_VERSION }}
+            npm install -g publish-pull-request@${{ env.NEW_VERSION }}
             ```
             
             ### Usage
