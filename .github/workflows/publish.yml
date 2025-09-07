@@ -76,24 +76,6 @@ jobs:
         run: npm audit --audit-level=high
         continue-on-error: true  # Don't fail the workflow for audit issues
       
-      # For manual workflow dispatch: bump version
-      - name: 📈 Bump version (manual trigger)
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          VERSION_TYPE="${{ github.event.inputs.version_type }}"
-          echo "Bumping $VERSION_TYPE version..."
-          
-          # Bump version and create tag
-          npm version $VERSION_TYPE
-          
-          # Get new version
-          NEW_VERSION=$(node -p "require('./package.json').version")
-          echo "NEW_VERSION=v$NEW_VERSION" >> $GITHUB_ENV
-          
-          # Push the version commit and tag
-          git push origin main
-          git push origin "v$NEW_VERSION"
-      
       # For tag triggers: extract version from tag
       - name: 📋 Extract version from tag
         if: startsWith(github.ref, 'refs/tags/v')

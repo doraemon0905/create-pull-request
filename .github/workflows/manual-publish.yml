@@ -190,17 +190,6 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       
-      - name: 🏷️ Create Git Tag (for custom versions)
-        if: github.event.inputs.version != '' && github.event.inputs.dry_run == 'false'
-        run: |
-          TAG_NAME="v${{ env.PUBLISH_VERSION }}"
-          
-          # Create and push tag
-          git tag "$TAG_NAME" -m "Release $TAG_NAME (manual publish)"
-          git push origin "$TAG_NAME"
-          
-          echo "✅ Created and pushed git tag: $TAG_NAME"
-      
       - name: 📊 Post-publish validation
         if: github.event.inputs.dry_run == 'false'
         run: |
