@@ -1,0 +1,211 @@
+name: 🚀 Publish to NPM
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on version tags like v1.0.0, v1.2.3, etc.
+  workflow_dispatch:  # Allows manual triggering
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - prerelease
+      dry_run:
+        description: 'Run in dry-run mode (no actual publish)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    
+    # Only run on main branch or tags
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      - name: 🔍 Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Fetch all history for proper git operations
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+      
+      - name: 📦 Install dependencies
+        run: npm ci
+      
+      - name: 🔍 Verify package integrity
+        run: npm audit signatures
+      
+      - name: 🧪 Run tests
+        run: npm test
+      
+      - name: 📝 Run linting
+        run: npm run lint
+      
+      - name: 🏗️ Build project
+        run: npm run build
+      
+      - name: 🔍 Validate build artifacts
+        run: |
+          # Check if build artifacts exist
+          if [ ! -f "lib/index.js" ]; then
+            echo "❌ Build artifacts not found!"
+            exit 1
+          fi
+          
+          # Check if binary is executable
+          if [ ! -x "bin/create-pr" ]; then
+            echo "❌ Binary is not executable!"
+            exit 1
+          fi
+          
+          echo "✅ Build artifacts validated"
+      
+      - name: 🔒 Security audit
+        run: npm audit --audit-level=high
+        continue-on-error: true  # Don't fail the workflow for audit issues
+      
+      # For manual workflow dispatch: bump version
+      - name: 📈 Bump version (manual trigger)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          VERSION_TYPE="${{ github.event.inputs.version_type }}"
+          echo "Bumping $VERSION_TYPE version..."
+          
+          # Bump version and create tag
+          npm version $VERSION_TYPE
+          
+          # Get new version
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "NEW_VERSION=v$NEW_VERSION" >> $GITHUB_ENV
+          
+          # Push the version commit and tag
+          git push origin main
+          git push origin "v$NEW_VERSION"
+      
+      # For tag triggers: extract version from tag
+      - name: 📋 Extract version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/}
+          echo "NEW_VERSION=$TAG_VERSION" >> $GITHUB_ENV
+          echo "Publishing version: $TAG_VERSION"
+      
+      - name: 🏷️ Create GitHub Release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.NEW_VERSION }}
+          release_name: Release ${{ env.NEW_VERSION }}
+          body: |
+            ## 🚀 What's New in ${{ env.NEW_VERSION }}
+            
+            ### Changes
+            - Auto-generated release from version tag
+            - See commit history for detailed changes
+            
+            ### Installation
+            ```bash
+            npm install -g create-pull-request@${{ env.NEW_VERSION }}
+            ```
+            
+            ### Usage
+            ```bash
+            create-pr create --jira YOUR-123
+            ```
+            
+            For full documentation, see [README.md](https://github.com/${{ github.repository }}/blob/main/README.md)
+          draft: false
+          prerelease: ${{ contains(env.NEW_VERSION, '-') }}
+      
+      # Dry run mode
+      - name: 🧪 NPM Publish (Dry Run)
+        if: github.event.inputs.dry_run == 'true'
+        run: |
+          echo "🧪 Running in dry-run mode - no actual publish"
+          npm publish --dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      
+      # Actual publish
+      - name: 🚀 Publish to NPM
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          echo "🚀 Publishing to NPM..."
+          npm publish
+          
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          
+          echo "✅ Successfully published $PACKAGE_NAME@$PACKAGE_VERSION"
+          echo "📦 Install with: npm install -g $PACKAGE_NAME@$PACKAGE_VERSION"
+          echo "🔗 View on NPM: https://www.npmjs.com/package/$PACKAGE_NAME"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      
+      - name: 📊 Post-publish validation
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          
+          echo "⏳ Waiting for NPM registry to sync..."
+          sleep 30
+          
+          # Verify package is available
+          if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version > /dev/null 2>&1; then
+            echo "✅ Package successfully published and available on NPM"
+          else
+            echo "⚠️ Package may still be syncing to NPM registry"
+          fi
+      
+      - name: 💬 Success notification
+        if: success() && github.event.inputs.dry_run != 'true'
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          
+          echo "🎉 SUCCESS! Package published successfully"
+          echo ""
+          echo "📦 Package: $PACKAGE_NAME@$PACKAGE_VERSION"
+          echo "🔗 NPM: https://www.npmjs.com/package/$PACKAGE_NAME"
+          echo "📚 GitHub: https://github.com/${{ github.repository }}"
+          echo ""
+          echo "🚀 Users can now install with:"
+          echo "   npm install -g $PACKAGE_NAME@$PACKAGE_VERSION"
+
+  # Notify on failure
+  notify_failure:
+    runs-on: ubuntu-latest
+    needs: publish
+    if: failure()
+    steps:
+      - name: 🚨 Failure notification
+        run: |
+          echo "❌ Publishing failed!"
+          echo "Please check the logs above for details."
+          echo ""
+          echo "Common issues:"
+          echo "1. NPM_TOKEN secret not set or invalid"
+          echo "2. Package version already exists"
+          echo "3. Tests or linting failures"
+          echo "4. Build errors"

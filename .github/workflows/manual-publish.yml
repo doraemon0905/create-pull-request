@@ -1,0 +1,260 @@
+name: 🎯 Manual Publish
+
+# This workflow allows manual publishing with more control and options
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 1.2.3) - leave empty to use current version'
+        required: false
+        type: string
+      tag:
+        description: 'NPM dist-tag (latest, beta, alpha, etc.)'
+        required: true
+        default: 'latest'
+        type: choice
+        options:
+          - latest
+          - beta
+          - alpha
+          - next
+          - canary
+      dry_run:
+        description: 'Dry run (test without actually publishing)'
+        required: false
+        default: true
+        type: boolean
+      force_publish:
+        description: 'Force publish (skip some validations)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  manual-publish:
+    runs-on: ubuntu-latest
+    environment: production  # Require manual approval for production deploys
+    
+    steps:
+      - name: 🔍 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+      
+      - name: 📦 Install dependencies
+        run: npm ci
+      
+      - name: 📋 Display publish configuration
+        run: |
+          echo "🎯 Manual Publish Configuration"
+          echo "================================"
+          echo "Version: ${{ github.event.inputs.version || 'current' }}"
+          echo "Tag: ${{ github.event.inputs.tag }}"
+          echo "Dry Run: ${{ github.event.inputs.dry_run }}"
+          echo "Force: ${{ github.event.inputs.force_publish }}"
+          echo "Triggered by: ${{ github.actor }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo ""
+          
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "Current package version: $CURRENT_VERSION"
+          
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "Will publish version: ${{ github.event.inputs.version }}"
+          else
+            echo "Will publish current version: $CURRENT_VERSION"
+          fi
+      
+      # Set custom version if provided
+      - name: 📝 Set custom version
+        if: github.event.inputs.version != ''
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          CUSTOM_VERSION="${{ github.event.inputs.version }}"
+          echo "Setting version to: $CUSTOM_VERSION"
+          
+          # Update package.json without creating git tag
+          npm version "$CUSTOM_VERSION" --no-git-tag-version
+          
+          echo "PUBLISH_VERSION=$CUSTOM_VERSION" >> $GITHUB_ENV
+      
+      - name: 📋 Set current version
+        if: github.event.inputs.version == ''
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "PUBLISH_VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
+      
+      # Conditional validation (can be skipped with force)
+      - name: 🧪 Run tests
+        if: github.event.inputs.force_publish != 'true'
+        run: npm test
+      
+      - name: 📝 Run linting
+        if: github.event.inputs.force_publish != 'true'
+        run: npm run lint
+      
+      - name: 🏗️ Build project
+        run: npm run build
+      
+      - name: 🔒 Security audit
+        if: github.event.inputs.force_publish != 'true'
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+      
+      - name: ⚠️ Force publish warning
+        if: github.event.inputs.force_publish == 'true'
+        run: |
+          echo "⚠️  WARNING: Force publish enabled!"
+          echo "   - Tests may have been skipped"
+          echo "   - Linting may have been skipped"
+          echo "   - Security audit may have been skipped"
+          echo ""
+      
+      - name: 📊 Pre-publish information
+        run: |
+          echo "📦 Package Information"
+          echo "====================="
+          
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          echo "Name: $PACKAGE_NAME"
+          echo "Version: ${{ env.PUBLISH_VERSION }}"
+          echo "Tag: ${{ github.event.inputs.tag }}"
+          echo ""
+          
+          echo "📁 Package Contents:"
+          npm pack --dry-run
+          echo ""
+          
+          # Check if version already exists
+          if npm view "$PACKAGE_NAME@${{ env.PUBLISH_VERSION }}" version > /dev/null 2>&1; then
+            echo "⚠️  Version ${{ env.PUBLISH_VERSION }} already exists on NPM!"
+            echo "   This will overwrite the existing version with the same tag."
+          else
+            echo "✅ Version ${{ env.PUBLISH_VERSION }} is new"
+          fi
+      
+      # Dry run
+      - name: 🧪 NPM Publish (Dry Run)
+        if: github.event.inputs.dry_run == 'true'
+        run: |
+          echo "🧪 DRY RUN MODE - No actual publishing"
+          echo "======================================"
+          
+          TAG="${{ github.event.inputs.tag }}"
+          if [ "$TAG" != "latest" ]; then
+            echo "Would run: npm publish --tag $TAG --dry-run"
+            npm publish --tag "$TAG" --dry-run
+          else
+            echo "Would run: npm publish --dry-run"
+            npm publish --dry-run
+          fi
+          
+          echo ""
+          echo "✅ Dry run completed successfully"
+          echo "   Remove 'dry_run' option to actually publish"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      
+      # Actual publish
+      - name: 🚀 NPM Publish (LIVE)
+        if: github.event.inputs.dry_run == 'false'
+        run: |
+          echo "🚀 LIVE PUBLISH MODE"
+          echo "==================="
+          
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          TAG="${{ github.event.inputs.tag }}"
+          
+          if [ "$TAG" != "latest" ]; then
+            echo "Publishing with tag: $TAG"
+            npm publish --tag "$TAG"
+            echo "📦 Published: $PACKAGE_NAME@${{ env.PUBLISH_VERSION }} with tag '$TAG'"
+            echo "🔗 Install: npm install $PACKAGE_NAME@$TAG"
+          else
+            echo "Publishing to latest"
+            npm publish
+            echo "📦 Published: $PACKAGE_NAME@${{ env.PUBLISH_VERSION }}"
+            echo "🔗 Install: npm install -g $PACKAGE_NAME"
+          fi
+          
+          echo ""
+          echo "🌐 View on NPM: https://www.npmjs.com/package/$PACKAGE_NAME"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      
+      - name: 🏷️ Create Git Tag (for custom versions)
+        if: github.event.inputs.version != '' && github.event.inputs.dry_run == 'false'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          TAG_NAME="v${{ env.PUBLISH_VERSION }}"
+          
+          # Create and push tag
+          git tag "$TAG_NAME" -m "Release $TAG_NAME (manual publish)"
+          git push origin "$TAG_NAME"
+          
+          echo "✅ Created and pushed git tag: $TAG_NAME"
+      
+      - name: 📊 Post-publish validation
+        if: github.event.inputs.dry_run == 'false'
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          TAG="${{ github.event.inputs.tag }}"
+          
+          echo "⏳ Waiting for NPM registry to sync..."
+          sleep 30
+          
+          if [ "$TAG" != "latest" ]; then
+            INSTALL_CMD="npm install $PACKAGE_NAME@$TAG"
+          else
+            INSTALL_CMD="npm install -g $PACKAGE_NAME"
+          fi
+          
+          echo "🔍 Verifying publication..."
+          if npm view "$PACKAGE_NAME@${{ env.PUBLISH_VERSION }}" version > /dev/null 2>&1; then
+            echo "✅ Package verified on NPM registry"
+            echo "📦 Install command: $INSTALL_CMD"
+          else
+            echo "⚠️ Package may still be syncing..."
+          fi
+      
+      - name: 📋 Success Summary
+        if: success()
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          TAG="${{ github.event.inputs.tag }}"
+          DRY_RUN="${{ github.event.inputs.dry_run }}"
+          
+          echo ""
+          echo "🎉 Manual Publish Completed!"
+          echo "============================"
+          echo "📦 Package: $PACKAGE_NAME"
+          echo "🔢 Version: ${{ env.PUBLISH_VERSION }}"
+          echo "🏷️  Tag: $TAG"
+          echo "🧪 Dry Run: $DRY_RUN"
+          echo "👤 Published by: ${{ github.actor }}"
+          echo ""
+          
+          if [ "$DRY_RUN" == "false" ]; then
+            echo "✅ Successfully published to NPM!"
+            echo "🔗 https://www.npmjs.com/package/$PACKAGE_NAME"
+            
+            if [ "$TAG" != "latest" ]; then
+              echo "📥 Install: npm install $PACKAGE_NAME@$TAG"
+            else
+              echo "📥 Install: npm install -g $PACKAGE_NAME"
+            fi
+          else
+            echo "🧪 Dry run completed - no actual publish performed"
+          fi

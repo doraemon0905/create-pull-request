@@ -1,0 +1,325 @@
+name: 🔍 CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run weekly security audits on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+
+jobs:
+  # Validate code quality on all pushes and PRs
+  validate:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [16, 18, 20]  # Test multiple Node.js versions
+    
+    steps:
+      - name: 🔍 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      
+      - name: 📦 Install dependencies
+        run: npm ci
+      
+      - name: 🔍 Check package integrity
+        run: |
+          # Verify package-lock.json is in sync
+          npm ci --dry-run
+          
+          # Check for security issues in dependencies
+          npm audit --audit-level=moderate
+        continue-on-error: ${{ matrix.node-version != 18 }}  # Only fail on primary version
+      
+      - name: 📝 Run ESLint
+        run: npm run lint
+      
+      - name: 🏗️ Build TypeScript
+        run: npm run build
+      
+      - name: 🧪 Run tests
+        run: npm test
+      
+      - name: 📊 Check build artifacts
+        run: |
+          echo "🔍 Checking build artifacts..."
+          
+          # Verify main entry point exists
+          if [ ! -f "lib/index.js" ]; then
+            echo "❌ Main entry point missing!"
+            exit 1
+          fi
+          
+          # Verify CLI binary exists and is executable
+          if [ ! -f "bin/create-pr" ]; then
+            echo "❌ CLI binary missing!"
+            exit 1
+          fi
+          
+          if [ ! -x "bin/create-pr" ]; then
+            echo "❌ CLI binary not executable!"
+            exit 1
+          fi
+          
+          # Check TypeScript declarations
+          if [ ! -f "lib/index.d.ts" ]; then
+            echo "❌ TypeScript declarations missing!"
+            exit 1
+          fi
+          
+          echo "✅ All build artifacts present and valid"
+      
+      - name: 🔍 Package validation
+        run: |
+          echo "🔍 Validating package.json..."
+          
+          # Check required fields
+          node -e "
+            const pkg = require('./package.json');
+            const required = ['name', 'version', 'description', 'main', 'bin', 'license'];
+            const missing = required.filter(field => !pkg[field]);
+            if (missing.length > 0) {
+              console.error('❌ Missing required fields:', missing.join(', '));
+              process.exit(1);
+            }
+            console.log('✅ All required package.json fields present');
+          "
+          
+          # Validate semantic versioning
+          node -e "
+            const pkg = require('./package.json');
+            const semverRegex = /^\\d+\\.\\d+\\.\\d+/;
+            if (!semverRegex.test(pkg.version)) {
+              console.error('❌ Invalid version format:', pkg.version);
+              process.exit(1);
+            }
+            console.log('✅ Version format valid:', pkg.version);
+          "
+      
+      - name: 🧪 Test CLI functionality (smoke test)
+        run: |
+          echo "🧪 Testing CLI functionality..."
+          
+          # Make binary executable (in case git doesn't preserve it)
+          chmod +x bin/create-pr
+          
+          # Test help command
+          node bin/create-pr --help > /dev/null
+          if [ $? -eq 0 ]; then
+            echo "✅ CLI help command works"
+          else
+            echo "❌ CLI help command failed"
+            exit 1
+          fi
+          
+          # Test config command
+          node bin/create-pr config > /dev/null
+          if [ $? -eq 0 ]; then
+            echo "✅ CLI config command works"
+          else
+            echo "❌ CLI config command failed"
+            exit 1
+          fi
+      
+      - name: 📦 Test packaging
+        if: matrix.node-version == 18  # Only test on primary version
+        run: |
+          echo "📦 Testing npm pack..."
+          npm pack --dry-run > pack-output.txt
+          
+          # Check if essential files are included
+          if ! grep -q "lib/" pack-output.txt; then
+            echo "❌ Build artifacts not included in package"
+            exit 1
+          fi
+          
+          if ! grep -q "bin/" pack-output.txt; then
+            echo "❌ CLI binary not included in package"
+            exit 1
+          fi
+          
+          if ! grep -q "README.md" pack-output.txt; then
+            echo "❌ README not included in package"
+            exit 1
+          fi
+          
+          echo "✅ Package contents validated"
+          
+          # Check package size
+          PACKAGE_SIZE=$(npm pack --silent | xargs ls -la | awk '{print $5}')
+          echo "📦 Package size: $PACKAGE_SIZE bytes"
+          
+          # Warn if package is too large (>5MB)
+          if [ "$PACKAGE_SIZE" -gt 5242880 ]; then
+            echo "⚠️ Package size is quite large (>5MB)"
+          fi
+
+  # Security and dependency checks
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔍 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: 📦 Install dependencies
+        run: npm ci
+      
+      - name: 🔒 Security audit
+        run: |
+          echo "🔒 Running security audit..."
+          npm audit --audit-level=moderate
+          
+          # Generate audit report
+          npm audit --json > audit-report.json || true
+          
+          # Check for high/critical issues
+          HIGH_ISSUES=$(cat audit-report.json | jq '.metadata.vulnerabilities.high // 0')
+          CRITICAL_ISSUES=$(cat audit-report.json | jq '.metadata.vulnerabilities.critical // 0')
+          
+          echo "Security summary:"
+          echo "  High issues: $HIGH_ISSUES"
+          echo "  Critical issues: $CRITICAL_ISSUES"
+          
+          if [ "$CRITICAL_ISSUES" -gt 0 ]; then
+            echo "❌ Critical security issues found!"
+            exit 1
+          elif [ "$HIGH_ISSUES" -gt 0 ]; then
+            echo "⚠️ High security issues found - review recommended"
+          else
+            echo "✅ No high or critical security issues"
+          fi
+      
+      - name: 🔍 License check
+        run: |
+          echo "🔍 Checking dependency licenses..."
+          # This requires license-checker to be installed
+          npx license-checker --summary || echo "License check skipped - license-checker not available"
+
+  # Code quality analysis
+  code-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🔍 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: 📦 Install dependencies
+        run: npm ci
+      
+      - name: 📊 Code complexity analysis
+        run: |
+          echo "📊 Analyzing code complexity..."
+          
+          # Simple complexity check using find and wc
+          TOTAL_LINES=$(find src -name "*.ts" -exec wc -l {} + | tail -1 | awk '{print $1}')
+          FILE_COUNT=$(find src -name "*.ts" | wc -l)
+          
+          if [ "$FILE_COUNT" -gt 0 ]; then
+            AVG_LINES=$((TOTAL_LINES / FILE_COUNT))
+            echo "📈 Code statistics:"
+            echo "   Total files: $FILE_COUNT"
+            echo "   Total lines: $TOTAL_LINES"
+            echo "   Average lines per file: $AVG_LINES"
+            
+            if [ "$AVG_LINES" -gt 300 ]; then
+              echo "⚠️ Average file size is quite large - consider refactoring"
+            else
+              echo "✅ File sizes look reasonable"
+            fi
+          fi
+      
+      - name: 🔍 Dead code detection
+        run: |
+          echo "🔍 Checking for potential dead code..."
+          
+          # Check for TODO/FIXME comments
+          TODO_COUNT=$(find src -name "*.ts" -exec grep -l "TODO\|FIXME\|XXX" {} + | wc -l)
+          if [ "$TODO_COUNT" -gt 0 ]; then
+            echo "📝 Found $TODO_COUNT files with TODO/FIXME comments"
+            find src -name "*.ts" -exec grep -Hn "TODO\|FIXME\|XXX" {} +
+          else
+            echo "✅ No TODO/FIXME comments found"
+          fi
+
+  # Compatibility testing
+  compatibility:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: [18]
+    
+    steps:
+      - name: 🔍 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      
+      - name: 📦 Install dependencies
+        run: npm ci
+      
+      - name: 🏗️ Build project
+        run: npm run build
+      
+      - name: 🧪 Test CLI on ${{ matrix.os }}
+        shell: bash
+        run: |
+          echo "🧪 Testing CLI functionality on ${{ matrix.os }}..."
+          
+          # Test help command
+          node bin/create-pr --help
+          
+          # Test config command
+          node bin/create-pr config
+          
+          echo "✅ CLI works on ${{ matrix.os }}"
+
+  # Report results
+  report:
+    runs-on: ubuntu-latest
+    needs: [validate, security, code-quality, compatibility]
+    if: always()
+    
+    steps:
+      - name: 📊 CI Summary
+        run: |
+          echo "📊 CI/CD Pipeline Summary"
+          echo "========================"
+          echo "Validation: ${{ needs.validate.result }}"
+          echo "Security: ${{ needs.security.result }}"
+          echo "Code Quality: ${{ needs.code-quality.result }}"
+          echo "Compatibility: ${{ needs.compatibility.result }}"
+          echo ""
+          
+          if [[ "${{ needs.validate.result }}" == "success" && 
+                "${{ needs.security.result }}" == "success" && 
+                "${{ needs.code-quality.result }}" == "success" && 
+                "${{ needs.compatibility.result }}" == "success" ]]; then
+            echo "✅ All checks passed! Ready for release."
+          else
+            echo "❌ Some checks failed. Review the results above."
+          fi
