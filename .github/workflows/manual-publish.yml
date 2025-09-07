@@ -77,9 +77,6 @@ jobs:
       - name: 📝 Set custom version
         if: github.event.inputs.version != ''
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          
           CUSTOM_VERSION="${{ github.event.inputs.version }}"
           echo "Setting version to: $CUSTOM_VERSION"
           
@@ -196,9 +193,6 @@ jobs:
       - name: 🏷️ Create Git Tag (for custom versions)
         if: github.event.inputs.version != '' && github.event.inputs.dry_run == 'false'
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          
           TAG_NAME="v${{ env.PUBLISH_VERSION }}"
           
           # Create and push tag

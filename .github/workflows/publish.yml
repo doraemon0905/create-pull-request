@@ -80,9 +80,6 @@ jobs:
       - name: 📈 Bump version (manual trigger)
         if: github.event_name == 'workflow_dispatch'
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          
           VERSION_TYPE="${{ github.event.inputs.version_type }}"
           echo "Bumping $VERSION_TYPE version..."
           
