@@ -134,29 +134,44 @@ jobs:
         if: matrix.node-version == 20  # Only test on primary version
         run: |
           echo "📦 Testing npm pack..."
-          npm pack --dry-run > pack-output.txt
+          
+          # Create pack output in temp location
+          PACK_OUTPUT=$(mktemp)
+          npm pack --dry-run > "$PACK_OUTPUT" 2>&1
+          
+          echo "📋 Package contents:"
+          cat "$PACK_OUTPUT"
+          echo ""
           
           # Check if essential files are included
-          if ! grep -q "lib/" pack-output.txt; then
+          if ! grep -q "lib/" "$PACK_OUTPUT"; then
             echo "❌ Build artifacts not included in package"
+            cat "$PACK_OUTPUT"
             exit 1
           fi
           
-          if ! grep -q "bin/" pack-output.txt; then
+          if ! grep -q "bin/" "$PACK_OUTPUT"; then
             echo "❌ CLI binary not included in package"
+            cat "$PACK_OUTPUT"
             exit 1
           fi
           
-          if ! grep -q "README.md" pack-output.txt; then
+          if ! grep -q "README.md" "$PACK_OUTPUT"; then
             echo "❌ README not included in package"
+            cat "$PACK_OUTPUT"
             exit 1
           fi
           
           echo "✅ Package contents validated"
           
           # Check package size
-          PACKAGE_SIZE=$(npm pack --silent | xargs ls -la | awk '{print $5}')
+          TARBALL=$(npm pack --silent)
+          PACKAGE_SIZE=$(ls -la "$TARBALL" | awk '{print $5}')
           echo "📦 Package size: $PACKAGE_SIZE bytes"
+          
+          # Clean up tarball
+          rm -f "$TARBALL"
+          rm -f "$PACK_OUTPUT"
           
           # Warn if package is too large (>5MB)
           if [ "$PACKAGE_SIZE" -gt 5242880 ]; then

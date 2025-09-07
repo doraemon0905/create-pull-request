@@ -25,6 +25,10 @@ coverage
 # Jest coverage
 /coverage/
 
+# npm pack output
+pack-output.txt
+*.tgz
+
 # nyc test coverage
 .nyc_output
 
