@@ -11,6 +11,7 @@
     "dev": "ts-node src/index.ts",
     "lint": "eslint src/**/*.ts",
     "test": "jest",
+    "setup-env": "node scripts/setup-env.js",
     "prepare": "npm run build",
     "prepublishOnly": "npm run lint && npm run build && npm run test",
     "version:patch": "./scripts/version.sh patch",
