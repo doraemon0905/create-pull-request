@@ -5,6 +5,8 @@ import chalk from 'chalk';
 import { config } from 'dotenv';
 import { createPullRequest } from './commands/create-pr';
 import { validateEnvironment } from './utils/validation';
+import { spawn } from 'child_process';
+import path from 'path';
 
 config();
 
@@ -49,6 +51,40 @@ program
     console.log(chalk.yellow('   GITHUB_TOKEN') + '=your-github-personal-access-token\n');
     console.log('3. Make sure your GitHub token has repo permissions');
     console.log('4. For Jira, generate an API token from your Atlassian account settings');
+  });
+
+program
+  .command('setup')
+  .description('Run interactive environment setup wizard')
+  .action(async () => {
+    try {
+      console.log(chalk.blue('🛠️  Starting environment setup wizard...\n'));
+      
+      const setupScript = path.join(__dirname, '..', 'scripts', 'setup-env.js');
+      
+      const setupProcess = spawn('node', [setupScript], {
+        stdio: 'inherit',
+        shell: true
+      });
+      
+      setupProcess.on('close', (code) => {
+        if (code === 0) {
+          console.log(chalk.green('\n✅ Setup completed successfully!'));
+          console.log(chalk.gray('You can now use "create-pr create" to generate pull requests.'));
+        } else {
+          console.error(chalk.red('\n❌ Setup failed with exit code:'), code);
+          process.exit(1);
+        }
+      });
+      
+      setupProcess.on('error', (error) => {
+        console.error(chalk.red('\n❌ Failed to run setup:'), error.message);
+        process.exit(1);
+      });
+    } catch (error) {
+      console.error(chalk.red('❌ Error:'), error instanceof Error ? error.message : 'Unknown error');
+      process.exit(1);
+    }
   });
 
 if (process.argv.length === 2) {
