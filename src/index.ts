@@ -44,14 +44,21 @@ program
   .description('Show current configuration and setup instructions')
   .action(() => {
     console.log(chalk.blue('📋 Configuration Setup:\n'));
+    console.log('🎯 ' + chalk.bold('Recommended: Use the interactive setup wizard'));
+    console.log(chalk.green('   Run: ') + chalk.yellow('create-pr setup') + chalk.gray(' (sets up global config automatically)\n'));
+    
+    console.log('⚙️  ' + chalk.bold('Alternative: Manual configuration'));
     console.log('1. Copy .env.example to .env');
     console.log('2. Fill in your credentials:\n');
     console.log(chalk.yellow('   JIRA_BASE_URL') + '=https://your-company.atlassian.net');
     console.log(chalk.yellow('   JIRA_USERNAME') + '=your-email@company.com');
     console.log(chalk.yellow('   JIRA_API_TOKEN') + '=your-jira-api-token');
     console.log(chalk.yellow('   GITHUB_TOKEN') + '=your-github-personal-access-token\n');
-    console.log('3. Make sure your GitHub token has repo permissions');
-    console.log('4. For Jira, generate an API token from your Atlassian account settings');
+    
+    console.log('📝 ' + chalk.bold('Important notes:'));
+    console.log('• Make sure your GitHub token has repo permissions');
+    console.log('• For Jira, generate an API token from your Atlassian account settings');
+    console.log('• The setup wizard creates a global config file for easier management');
   });
 
 program
