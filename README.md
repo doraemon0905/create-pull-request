@@ -156,7 +156,7 @@ Title: PROJ-123: Implement user authentication
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/create-pull-request.git
+git clone https://github.com/doraemon0905/create-pull-request.git
 cd create-pull-request
 
 # Install dependencies

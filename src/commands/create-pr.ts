@@ -12,6 +12,7 @@ export interface CreatePROptions {
   base?: string;
   title?: string;
   dryRun?: boolean;
+  draft?: boolean;
 }
 
 export async function createPullRequest(options: CreatePROptions): Promise<void> {
@@ -194,6 +195,7 @@ export async function createPullRequest(options: CreatePROptions): Promise<void>
       console.log(chalk.bold('From:'), currentBranch);
       console.log(chalk.bold('To:'), baseBranch);
       console.log(chalk.bold('Title:'), finalTitle);
+      console.log(chalk.bold('Draft:'), options.draft ? 'Yes' : 'No');
       console.log(chalk.bold('Body:'), finalBody);
       console.log(chalk.green('\n✅ Dry run completed. No pull request was created.'));
     } else {
@@ -203,15 +205,20 @@ export async function createPullRequest(options: CreatePROptions): Promise<void>
         title: finalTitle,
         body: finalBody,
         head: currentBranch,
-        base: baseBranch
+        base: baseBranch,
+        draft: options.draft
       });
 
-      spinner.succeed('Pull request created successfully!');
+      const draftText = options.draft ? ' draft' : '';
+      spinner.succeed(`Pull request${draftText} created successfully!`);
       
-      console.log(chalk.green('\n🎉 Pull Request Created:'));
+      console.log(chalk.green(`\n🎉${options.draft ? ' Draft' : ''} Pull Request Created:`));
       console.log(chalk.bold('URL:'), pullRequest.html_url);
       console.log(chalk.bold('Number:'), `#${pullRequest.number}`);
       console.log(chalk.bold('Title:'), pullRequest.title);
+      if (options.draft) {
+        console.log(chalk.yellow('📝 Note: This is a draft pull request'));
+      }
     }
 
   } catch (error) {
