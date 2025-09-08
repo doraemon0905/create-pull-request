@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import { getConfig } from '../utils/config';
 
 export interface JiraTicket {
   key: string;
@@ -16,19 +17,17 @@ export class JiraService {
   private client: AxiosInstance;
 
   constructor() {
-    const baseURL = process.env.JIRA_BASE_URL;
-    const username = process.env.JIRA_USERNAME;
-    const apiToken = process.env.JIRA_API_TOKEN;
-
-    if (!baseURL || !username || !apiToken) {
-      throw new Error('Missing Jira configuration. Please check your environment variables.');
+    const jiraConfig = getConfig('jira');
+    
+    if (!jiraConfig.baseUrl || !jiraConfig.username || !jiraConfig.apiToken) {
+      throw new Error('Missing Jira configuration. Please run "create-pr setup" to configure your credentials.');
     }
 
     this.client = axios.create({
-      baseURL: `${baseURL}/rest/api/3`,
+      baseURL: `${jiraConfig.baseUrl}/rest/api/3`,
       auth: {
-        username,
-        password: apiToken
+        username: jiraConfig.username,
+        password: jiraConfig.apiToken
       },
       headers: {
         'Accept': 'application/json',

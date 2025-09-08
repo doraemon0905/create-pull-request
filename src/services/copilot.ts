@@ -2,6 +2,7 @@ import axios, { AxiosInstance } from 'axios';
 import { JiraTicket } from './jira';
 import { GitChanges } from './git';
 import { PullRequestTemplate } from './github';
+import { getConfig } from '../utils/config';
 
 export interface GenerateDescriptionOptions {
   jiraTicket: JiraTicket;
@@ -21,10 +22,12 @@ export class CopilotService {
 
   constructor() {
     // GitHub Copilot uses the same token as GitHub API
-    const token = process.env.GITHUB_TOKEN || process.env.COPILOT_API_TOKEN;
+    const githubConfig = getConfig('github');
+    const copilotConfig = getConfig('copilot');
+    const token = githubConfig.token || copilotConfig.apiToken;
 
     if (!token) {
-      throw new Error('Missing GitHub/Copilot token. Please set GITHUB_TOKEN environment variable.');
+      throw new Error('Missing GitHub/Copilot token. Please run "create-pr setup" to configure your credentials.');
     }
 
     this.client = axios.create({
@@ -166,6 +169,7 @@ export class CopilotService {
 
   private generateFallbackDescription(options: GenerateDescriptionOptions): GeneratedPRContent {
     const { jiraTicket, gitChanges, template, prTitle } = options;
+    const jiraConfig = getConfig('jira');
 
     // Generate title
     const title = prTitle || `${jiraTicket.key}: ${jiraTicket.summary}`;
@@ -182,7 +186,7 @@ export class CopilotService {
     } else {
       // Default template
       body = `## Summary\n\n`;
-      body += `This PR implements changes for Jira ticket [${jiraTicket.key}](${process.env.JIRA_BASE_URL}/browse/${jiraTicket.key}).\n\n`;
+      body += `This PR implements changes for Jira ticket [${jiraTicket.key}](${jiraConfig.baseUrl}/browse/${jiraTicket.key}).\n\n`;
       body += `**Ticket Summary:** ${jiraTicket.summary}\n\n`;
       
       if (jiraTicket.description) {
@@ -212,7 +216,7 @@ export class CopilotService {
       body += `- [ ] Integration tests passing\n\n`;
 
       body += `## Related\n\n`;
-      body += `- Jira Ticket: [${jiraTicket.key}](${process.env.JIRA_BASE_URL}/browse/${jiraTicket.key})\n`;
+      body += `- Jira Ticket: [${jiraTicket.key}](${jiraConfig.baseUrl}/browse/${jiraTicket.key})\n`;
     }
 
     return { title, body };

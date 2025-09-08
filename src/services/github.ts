@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { simpleGit, SimpleGit } from 'simple-git';
+import { getConfig } from '../utils/config';
 
 export interface GitHubRepo {
   owner: string;
@@ -24,16 +25,16 @@ export class GitHubService {
   private git: SimpleGit;
 
   constructor() {
-    const token = process.env.GITHUB_TOKEN;
+    const githubConfig = getConfig('github');
 
-    if (!token) {
-      throw new Error('Missing GitHub token. Please set GITHUB_TOKEN environment variable.');
+    if (!githubConfig.token) {
+      throw new Error('Missing GitHub token. Please run "create-pr setup" to configure your credentials.');
     }
 
     this.client = axios.create({
       baseURL: 'https://api.github.com',
       headers: {
-        'Authorization': `token ${token}`,
+        'Authorization': `token ${githubConfig.token}`,
         'Accept': 'application/vnd.github.v3+json',
         'User-Agent': 'create-pr-cli'
       }
