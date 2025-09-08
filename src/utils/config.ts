@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 export interface JiraConfig {
     baseUrl: string;
@@ -25,7 +26,7 @@ export interface EnvironmentConfig {
     version: string;
 }
 
-const CONFIG_FILE = path.join(__dirname, '..', '..', 'config', 'env-config.json');
+const CONFIG_FILE = path.join(os.homedir(), '.create-pr', 'env-config.json');
 
 /**
  * Load configuration from JSON file
