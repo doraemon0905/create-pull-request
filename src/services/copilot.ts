@@ -276,7 +276,7 @@ export class CopilotService {
     const summary = this.generateFallbackSummary(jiraTicket, gitChanges);
 
     // Generate shorter title based on summary
-    const title = prTitle || this.generateShortTitle(jiraTicket, summary);
+    const title = prTitle || this.generateShortTitle(jiraTicket);
 
     // Generate body based on template or default structure
     let body = '';
@@ -398,7 +398,7 @@ export class CopilotService {
     return `${action} ${jiraTicket.summary.toLowerCase()}${fileContext} to address ${jiraTicket.key}`;
   }
 
-  private generateShortTitle(jiraTicket: JiraTicket, summary: string): string {
+  private generateShortTitle(jiraTicket: JiraTicket): string {
     // Extract key action and subject from summary
     const action = this.getActionFromIssueType(jiraTicket.issueType);
     const subject = this.extractSubjectFromSummary(jiraTicket.summary);
@@ -428,7 +428,7 @@ export class CopilotService {
 
   private extractSubjectFromSummary(summary: string): string {
     // Remove common prefixes and clean up the summary
-    let subject = summary
+    const subject = summary
       .replace(/^(add|implement|create|fix|update|improve|refactor)\s+/i, '')
       .replace(/\s+/g, ' ')
       .trim();
