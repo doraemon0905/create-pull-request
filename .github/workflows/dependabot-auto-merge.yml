@@ -16,8 +16,6 @@ jobs:
     steps:
       - name: 🔍 Checkout code
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GH_TOKEN }}
       
       - name: 🤖 Enable auto-merge for Dependabot PRs
         run: |
@@ -48,7 +46,6 @@ jobs:
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
       
       - name: 📝 Add comment about auto-merge
         if: success()
@@ -64,4 +61,3 @@ jobs:
           If you need to make changes or disable auto-merge, you can do so from the PR page."
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
