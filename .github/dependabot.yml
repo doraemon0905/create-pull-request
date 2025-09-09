@@ -1,5 +1,3 @@
-name: 🚀 Dependabot
-
 version: 2
 updates:
   # Enable version updates for npm dependencies
@@ -9,7 +7,7 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "09:00"
-      timezone: "UTC"
+      timezone: "Etc/UTC"
     # Limit the number of open PRs to avoid spam
     open-pull-requests-limit: 5
     # Group updates by dependency type to reduce PR noise
