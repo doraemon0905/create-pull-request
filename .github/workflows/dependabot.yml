@@ -1,0 +1,49 @@
+version: 2
+updates:
+  # Enable version updates for npm dependencies
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    # Limit the number of open PRs to avoid spam
+    open-pull-requests-limit: 5
+    # Group updates by dependency type to reduce PR noise
+    groups:
+      # Group all patch updates together
+      patch-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+      # Group all minor updates together  
+      minor-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+      # Group development dependencies together
+      dev-dependencies:
+        dependency-type: "development"
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    # Allow both direct and indirect dependency updates
+    allow:
+      - dependency-type: "direct"
+      - dependency-type: "indirect"
+    # Add commit message prefix
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    # Rebase strategy for handling conflicts
+    rebase-strategy: "auto"
+    # Labels to add to PRs
+    labels:
+      - "dependencies"
+      - "automated"
