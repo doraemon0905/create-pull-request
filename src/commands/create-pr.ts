@@ -85,8 +85,8 @@ export async function createPullRequest(options: CreatePROptions): Promise<void>
       throw new Error(`Base branch '${baseBranch}' does not exist`);
     }
 
-    // Get git changes
-    const gitChanges = await gitService.getChanges(baseBranch);
+    // Get git changes with detailed diff content for enhanced PR description
+    const gitChanges = await gitService.getChanges(baseBranch, true);
     const repo = await githubService.getCurrentRepo();
     spinner.succeed(`Repository: ${repo.owner}/${repo.repo}, Branch: ${currentBranch}`);
 

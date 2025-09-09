@@ -21,5 +21,6 @@ export declare class CopilotService {
     private parseCopilotResponse;
     private extractTitle;
     private generateFallbackDescription;
+    private getFileRelevanceDescription;
 }
 //# sourceMappingURL=copilot.d.ts.map

@@ -6,6 +6,11 @@ export interface FileChange {
   insertions: number;
   deletions: number;
   changes: number;
+  diffContent?: string;
+  lineNumbers?: {
+    added: number[];
+    removed: number[];
+  };
 }
 
 export interface GitChanges {
@@ -23,7 +28,7 @@ export class GitService {
     this.git = simpleGit();
   }
 
-  async getChanges(baseBranch: string = 'main'): Promise<GitChanges> {
+  async getChanges(baseBranch: string = 'main', includeDetailedDiff: boolean = false): Promise<GitChanges> {
     try {
       // Get current branch
       const currentBranch = await this.git.branch();
@@ -41,13 +46,30 @@ export class GitService {
       const commits = log.all.map(commit => commit.message);
 
       // Process file changes
-      const files: FileChange[] = diffSummary.files.map(file => ({
-        file: file.file,
-        status: this.mapGitStatus(file),
-        insertions: 'insertions' in file ? file.insertions : 0,
-        deletions: 'deletions' in file ? file.deletions : 0,
-        changes: 'changes' in file ? file.changes : 0
-      }));
+      const files: FileChange[] = await Promise.all(
+        diffSummary.files.map(async (file) => {
+          const baseFileChange: FileChange = {
+            file: file.file,
+            status: this.mapGitStatus(file),
+            insertions: 'insertions' in file ? file.insertions : 0,
+            deletions: 'deletions' in file ? file.deletions : 0,
+            changes: 'changes' in file ? file.changes : 0
+          };
+
+          if (includeDetailedDiff) {
+            try {
+              const fileDiff = await this.git.diff([`${baseBranch}...HEAD`, '--', file.file]);
+              baseFileChange.diffContent = fileDiff;
+              baseFileChange.lineNumbers = this.extractLineNumbers(fileDiff);
+            } catch (error) {
+              // If we can't get diff for a specific file, continue without it
+              console.warn(`Could not get diff for file ${file.file}:`, error);
+            }
+          }
+
+          return baseFileChange;
+        })
+      );
 
       return {
         files,
@@ -133,5 +155,47 @@ export class GitService {
     }
     
     return 'modified';
+  }
+
+  private extractLineNumbers(diffContent: string): { added: number[]; removed: number[] } {
+    const added: number[] = [];
+    const removed: number[] = [];
+    
+    const lines = diffContent.split('\n');
+    let currentNewLine = 0;
+    let currentOldLine = 0;
+    
+    for (const line of lines) {
+      // Parse hunk headers (e.g., @@ -1,4 +1,6 @@)
+      const hunkMatch = line.match(/^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/);
+      if (hunkMatch) {
+        currentOldLine = parseInt(hunkMatch[1], 10) - 1;
+        currentNewLine = parseInt(hunkMatch[2], 10) - 1;
+        continue;
+      }
+      
+      // Skip lines that don't represent content changes
+      if (line.startsWith('diff --git') || 
+          line.startsWith('index ') || 
+          line.startsWith('+++') || 
+          line.startsWith('---')) {
+        continue;
+      }
+      
+      // Handle content lines
+      if (line.startsWith('+') && !line.startsWith('+++')) {
+        currentNewLine++;
+        added.push(currentNewLine);
+      } else if (line.startsWith('-') && !line.startsWith('---')) {
+        currentOldLine++;
+        removed.push(currentOldLine);
+      } else if (line.startsWith(' ')) {
+        // Unchanged line - increment both counters
+        currentNewLine++;
+        currentOldLine++;
+      }
+    }
+    
+    return { added, removed };
   }
 }

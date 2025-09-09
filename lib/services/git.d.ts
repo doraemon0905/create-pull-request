@@ -4,6 +4,11 @@ export interface FileChange {
     insertions: number;
     deletions: number;
     changes: number;
+    diffContent?: string;
+    lineNumbers?: {
+        added: number[];
+        removed: number[];
+    };
 }
 export interface GitChanges {
     files: FileChange[];
@@ -15,12 +20,13 @@ export interface GitChanges {
 export declare class GitService {
     private git;
     constructor();
-    getChanges(baseBranch?: string): Promise<GitChanges>;
+    getChanges(baseBranch?: string, includeDetailedDiff?: boolean): Promise<GitChanges>;
     getDiffContent(baseBranch?: string, maxLines?: number): Promise<string>;
     getCurrentBranch(): Promise<string>;
     validateRepository(): Promise<void>;
     hasUncommittedChanges(): Promise<boolean>;
     branchExists(branchName: string): Promise<boolean>;
     private mapGitStatus;
+    private extractLineNumbers;
 }
 //# sourceMappingURL=git.d.ts.map
