@@ -93,10 +93,10 @@ export class CopilotService {
       summaryPrompt += `\`\`\`diff\n${diffContent.substring(0, 1000)}\n\`\`\`\n`;
     }
 
-    summaryPrompt += `\nPlease provide a 1-2 sentence summary that captures the essence of what this PR accomplishes. Focus on the main feature or change being implemented.`;
+    summaryPrompt += `\nPlease provide a 1-2 sentence summary that captures the essence of what this PR accomplishes. Focus on the main feature or change being implemented and explain WHY these code changes are necessary to fulfill the specific requirements outlined in the JIRA ticket description. The summary should clearly connect the implementation to the business need described in the ticket and reference specific files or line numbers where key changes were made.`;
     
     if (template) {
-      summaryPrompt += ` The summary should be appropriate for the provided PR template structure.`;
+      summaryPrompt += ` IMPORTANT: You MUST strictly follow the provided PR template structure and format. The summary should be formatted exactly as expected by the template, filling in the appropriate sections and placeholders. Do not deviate from the template format.`;
     }
 
     try {
