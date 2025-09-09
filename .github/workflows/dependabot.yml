@@ -1,3 +1,5 @@
+name: 🚀 Dependabot
+
 version: 2
 updates:
   # Enable version updates for npm dependencies
