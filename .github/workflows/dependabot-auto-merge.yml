@@ -1,0 +1,67 @@
+name: 🤖 Dependabot Auto-Merge
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    
+    steps:
+      - name: 🔍 Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+      
+      - name: 🤖 Enable auto-merge for Dependabot PRs
+        run: |
+          echo "🤖 Processing Dependabot PR #${{ github.event.number }}"
+          
+          # Get PR information
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          PR_AUTHOR="${{ github.event.pull_request.user.login }}"
+          
+          echo "PR Title: $PR_TITLE"
+          echo "PR Author: $PR_AUTHOR"
+          
+          # Check if this is a Dependabot PR
+          if [[ "$PR_AUTHOR" == "dependabot[bot]" ]]; then
+            echo "✅ Confirmed Dependabot PR"
+            
+            # Approve the PR
+            gh pr review ${{ github.event.number }} --approve --body "🤖 Auto-approved by Dependabot workflow"
+            
+            # Enable auto-merge (squash merge)
+            gh pr merge ${{ github.event.number }} --auto --squash --delete-branch
+            
+            echo "🚀 Auto-merge enabled for PR #${{ github.event.number }}"
+            echo "The PR will be automatically merged after all status checks pass."
+          else
+            echo "❌ Not a Dependabot PR, skipping auto-merge"
+            exit 1
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      
+      - name: 📝 Add comment about auto-merge
+        if: success()
+        run: |
+          gh pr comment ${{ github.event.number }} --body "🤖 **Auto-merge enabled**
+
+          This Dependabot PR has been automatically approved and will be merged once all CI checks pass.
+          
+          - ✅ Automatically approved
+          - 🔄 Auto-merge enabled (squash merge)
+          - 🗑️ Branch will be automatically deleted after merge
+          
+          If you need to make changes or disable auto-merge, you can do so from the PR page."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
