@@ -54,7 +54,7 @@ export class CopilotService {
   }
 
   private buildPrompt(options: GenerateDescriptionOptions): string {
-    const { jiraTicket, gitChanges, template, diffContent, prTitle } = options;
+    const { jiraTicket, gitChanges, template, diffContent } = options;
 
     let prompt = `Generate a comprehensive pull request description based on the following information:\n\n`;
 
@@ -298,7 +298,6 @@ export class CopilotService {
 
   private getFileRelevanceDescription(file: FileChange, jiraTicket: JiraTicket): string {
     const fileName = file.file.toLowerCase();
-    const ticketSummary = jiraTicket.summary.toLowerCase();
     
     // Attempt to infer file relevance based on common patterns
     if (fileName.includes('test') || fileName.includes('spec')) {
