@@ -1,6 +1,7 @@
 import { Octokit } from '@octokit/rest';
 import { simpleGit, SimpleGit } from 'simple-git';
 import { getConfig } from '../utils/config';
+import { FILE_PATHS, REGEX_PATTERNS, HEADERS, HTTP_STATUS, LIMITS, CONFIG } from '../constants';
 
 export interface GitHubRepo {
   owner: string;
@@ -33,7 +34,7 @@ export class GitHubService {
 
     this.octokit = new Octokit({
       auth: githubConfig.token,
-      userAgent: 'create-pr-cli'
+      userAgent: HEADERS.USER_AGENT
     });
 
     this.git = simpleGit();
@@ -42,14 +43,14 @@ export class GitHubService {
   async getCurrentRepo(): Promise<GitHubRepo> {
     try {
       const remotes = await this.git.getRemotes(true);
-      const originRemote = remotes.find(remote => remote.name === 'origin');
+      const originRemote = remotes.find(remote => remote.name === CONFIG.DEFAULT_REMOTE);
       
       if (!originRemote?.refs?.push) {
         throw new Error('No origin remote found');
       }
 
       const url = originRemote.refs.push;
-      const match = url.match(/github\.com[/:]([\w-]+)\/([\w-]+)(?:\.git)?/);
+      const match = url.match(REGEX_PATTERNS.GITHUB_URL);
       
       if (!match) {
         throw new Error('Unable to parse GitHub repository from remote URL');
@@ -66,13 +67,7 @@ export class GitHubService {
 
   async getPullRequestTemplates(repo: GitHubRepo): Promise<PullRequestTemplate[]> {
     const templates: PullRequestTemplate[] = [];
-    const possiblePaths = [
-      '.github/pull_request_template.md',
-      '.github/PULL_REQUEST_TEMPLATE.md',
-      'pull_request_template.md',
-      'PULL_REQUEST_TEMPLATE.md',
-      '.github/PULL_REQUEST_TEMPLATE/default.md'
-    ];
+    const possiblePaths = FILE_PATHS.PR_TEMPLATE_PATHS;
 
     for (const path of possiblePaths) {
       try {
@@ -157,11 +152,11 @@ export class GitHubService {
       });
       return response.data;
     } catch (error: any) {
-      if (error.status === 401) {
+      if (error.status === HTTP_STATUS.UNAUTHORIZED) {
         throw new Error('Authentication failed. Please check your GitHub token.');
-      } else if (error.status === 403) {
+      } else if (error.status === HTTP_STATUS.FORBIDDEN) {
         throw new Error('Access denied. Please check your GitHub token permissions.');
-      } else if (error.status === 404) {
+      } else if (error.status === HTTP_STATUS.NOT_FOUND) {
         throw new Error('Pull request not found.');
       }
       throw new Error(`GitHub API error: ${error.message}`);
@@ -237,8 +232,8 @@ export class GitHubService {
     }
 
     // Check for title length (GitHub has limits)
-    if (pullRequest.title && pullRequest.title.length > 256) {
-      errors.push('Title is too long (maximum 256 characters)');
+    if (pullRequest.title && pullRequest.title.length > LIMITS.MAX_PR_TITLE_LENGTH) {
+      errors.push(`Title is too long (maximum ${LIMITS.MAX_PR_TITLE_LENGTH} characters)`);
     }
 
     if (pullRequest.head === pullRequest.base) {

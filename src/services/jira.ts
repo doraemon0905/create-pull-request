@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { getConfig } from '../utils/config';
+import { API_URLS, JIRA_ENDPOINTS, HEADERS, HTTP_STATUS } from '../constants';
 
 export interface JiraTicket {
   key: string;
@@ -24,21 +25,21 @@ export class JiraService {
     }
 
     this.client = axios.create({
-      baseURL: `${jiraConfig.baseUrl}/rest/api/3`,
+      baseURL: `${jiraConfig.baseUrl}${API_URLS.JIRA_API_VERSION}`,
       auth: {
         username: jiraConfig.username,
         password: jiraConfig.apiToken
       },
       headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
+        'Accept': HEADERS.JSON_CONTENT_TYPE,
+        'Content-Type': HEADERS.JSON_CONTENT_TYPE
       }
     });
   }
 
   async getTicket(ticketKey: string): Promise<JiraTicket> {
     try {
-      const response = await this.client.get(`/issue/${ticketKey}`, {
+      const response = await this.client.get(`${JIRA_ENDPOINTS.ISSUE}${ticketKey}`, {
         params: {
           fields: 'summary,description,issuetype,status,assignee,reporter,created,updated'
         }
@@ -60,11 +61,11 @@ export class JiraService {
       };
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        if (error.response?.status === 404) {
+        if (error.response?.status === HTTP_STATUS.NOT_FOUND) {
           throw new Error(`Jira ticket '${ticketKey}' not found. Please check the ticket key.`);
-        } else if (error.response?.status === 401) {
+        } else if (error.response?.status === HTTP_STATUS.UNAUTHORIZED) {
           throw new Error('Authentication failed. Please check your Jira credentials.');
-        } else if (error.response?.status === 403) {
+        } else if (error.response?.status === HTTP_STATUS.FORBIDDEN) {
           throw new Error('Access denied. Please check your Jira permissions.');
         }
         throw new Error(`Jira API error: ${error.response?.data?.errorMessages?.[0] || error.message}`);

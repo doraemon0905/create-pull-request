@@ -1,4 +1,5 @@
 import { simpleGit, SimpleGit } from 'simple-git';
+import { CONFIG, LIMITS } from '../constants';
 
 export interface FileChange {
   file: string;
@@ -28,7 +29,7 @@ export class GitService {
     this.git = simpleGit();
   }
 
-  async getChanges(baseBranch: string = 'main', includeDetailedDiff: boolean = false): Promise<GitChanges> {
+  async getChanges(baseBranch: string = CONFIG.DEFAULT_BRANCH, includeDetailedDiff: boolean = false): Promise<GitChanges> {
     try {
       // Get current branch
       const currentBranch = await this.git.branch();
@@ -83,7 +84,7 @@ export class GitService {
     }
   }
 
-  async getDiffContent(baseBranch: string = 'main', maxLines: number = 1000): Promise<string> {
+  async getDiffContent(baseBranch: string = CONFIG.DEFAULT_BRANCH, maxLines: number = LIMITS.DEFAULT_MAX_DIFF_LINES): Promise<string> {
     try {
       const diff = await this.git.diff([`${baseBranch}...HEAD`]);
       
@@ -169,8 +170,8 @@ export class GitService {
       // Parse hunk headers (e.g., @@ -1,4 +1,6 @@)
       const hunkMatch = line.match(/^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/);
       if (hunkMatch) {
-        currentOldLine = parseInt(hunkMatch[1], 10) - 1;
-        currentNewLine = parseInt(hunkMatch[2], 10) - 1;
+        currentOldLine = parseInt(hunkMatch[1], LIMITS.HUNK_HEADER_OFFSET) - 1;
+        currentNewLine = parseInt(hunkMatch[2], LIMITS.HUNK_HEADER_OFFSET) - 1;
         continue;
       }
       

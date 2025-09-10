@@ -5,6 +5,7 @@ import { GitChanges, FileChange } from './git';
 import { PullRequestTemplate } from './github';
 import { getConfig } from '../utils/config';
 import * as inquirer from 'inquirer';
+import { API_URLS, LIMITS, HEADERS, DEFAULT_MODELS } from '../constants';
 
 export interface GenerateDescriptionOptions {
   jiraTicket: JiraTicket;
@@ -60,12 +61,12 @@ export class CopilotService {
                       process.env.CHATGPT_API_KEY;
     if (chatGptKey) {
       this.clients.set('chatgpt', axios.create({
-        baseURL: 'https://api.openai.com/v1',
+        baseURL: API_URLS.OPENAI_BASE_URL,
         headers: {
           'Authorization': `Bearer ${chatGptKey}`,
-          'Content-Type': 'application/json'
+          'Content-Type': HEADERS.JSON_CONTENT_TYPE
         },
-        timeout: 30000
+        timeout: LIMITS.API_TIMEOUT_MS
       }));
     }
 
@@ -75,8 +76,8 @@ export class CopilotService {
                      process.env.GOOGLE_API_KEY;
     if (geminiKey) {
       this.clients.set('gemini', axios.create({
-        baseURL: 'https://generativelanguage.googleapis.com/v1beta',
-        timeout: 30000
+        baseURL: API_URLS.GEMINI_BASE_URL,
+        timeout: LIMITS.API_TIMEOUT_MS
       }));
     }
 
@@ -86,13 +87,13 @@ export class CopilotService {
                         githubConfig.token;
     if (copilotToken) {
       this.clients.set('copilot', axios.create({
-        baseURL: 'https://api.githubcopilot.com',
+        baseURL: API_URLS.COPILOT_BASE_URL,
         headers: {
           'Authorization': `Bearer ${copilotToken}`,
-          'Content-Type': 'application/json',
-          'User-Agent': 'create-pr-cli'
+          'Content-Type': HEADERS.JSON_CONTENT_TYPE,
+          'User-Agent': HEADERS.USER_AGENT
         },
-        timeout: 30000
+        timeout: LIMITS.API_TIMEOUT_MS
       }));
     }
   }
@@ -204,14 +205,14 @@ export class CopilotService {
     summaryPrompt += `- Summary: ${jiraTicket.summary}\n`;
     summaryPrompt += `- Type: ${jiraTicket.issueType}\n`;
     if (jiraTicket.description) {
-      summaryPrompt += `- Description: ${jiraTicket.description.substring(0, 500)}${jiraTicket.description.length > 500 ? '...' : ''}\n`;
+      summaryPrompt += `- Description: ${jiraTicket.description.substring(0, LIMITS.MAX_DESCRIPTION_PREVIEW_LENGTH)}${jiraTicket.description.length > LIMITS.MAX_DESCRIPTION_PREVIEW_LENGTH ? '...' : ''}\n`;
     }
 
     // PR Template context if available
     if (template) {
       summaryPrompt += `\n## PR Template Context:\n`;
       summaryPrompt += `This PR should follow this template structure:\n`;
-      summaryPrompt += `${template.content.substring(0, 800)}${template.content.length > 800 ? '...' : ''}\n`;
+      summaryPrompt += `${template.content.substring(0, LIMITS.MAX_TEMPLATE_PREVIEW_LENGTH)}${template.content.length > LIMITS.MAX_TEMPLATE_PREVIEW_LENGTH ? '...' : ''}\n`;
       summaryPrompt += `Please ensure the summary aligns with the template's intended structure and sections.\n`;
     }
 
@@ -415,8 +416,8 @@ export class CopilotService {
       }
       
       if (file.diffContent) {
-        const truncatedDiff = file.diffContent.length > 1000 
-          ? file.diffContent.substring(0, 1000) + '\n... (truncated for brevity)'
+        const truncatedDiff = file.diffContent.length > LIMITS.MAX_DIFF_CONTENT_LENGTH 
+          ? file.diffContent.substring(0, LIMITS.MAX_DIFF_CONTENT_LENGTH) + '\n... (truncated for brevity)'
           : file.diffContent;
         prompt += `- Code changes:\n\`\`\`diff\n${truncatedDiff}\n\`\`\`\n`;
       }
@@ -452,7 +453,7 @@ export class CopilotService {
     // Overall diff content for context
     if (diffContent) {
       prompt += `## Overall Code Changes Context:\n`;
-      prompt += `\`\`\`diff\n${diffContent.substring(0, 3000)}${diffContent.length > 3000 ? '\n... (diff truncated for brevity)' : ''}\n\`\`\`\n\n`;
+      prompt += `\`\`\`diff\n${diffContent.substring(0, LIMITS.MAX_OVERALL_DIFF_LENGTH)}${diffContent.length > LIMITS.MAX_OVERALL_DIFF_LENGTH ? '\n... (diff truncated for brevity)' : ''}\n\`\`\`\n\n`;
     }
 
     // Add summary context if available
@@ -579,11 +580,11 @@ export class CopilotService {
     } catch {
       aiProvidersConfig = null;
     }
-    const model = aiProvidersConfig?.openai?.model || process.env.OPENAI_MODEL || 'gpt-4o';
+    const model = aiProvidersConfig?.openai?.model || process.env.OPENAI_MODEL || DEFAULT_MODELS.OPENAI;
     
     const response = await client.post('/chat/completions', {
       model: model,
-      max_tokens: 4000,
+      max_tokens: LIMITS.MAX_API_TOKENS,
       messages: [
         {
           role: 'user',
@@ -606,7 +607,7 @@ export class CopilotService {
     } catch {
       aiProvidersConfig = null;
     }
-    const model = aiProvidersConfig?.gemini?.model || process.env.GEMINI_MODEL || 'gemini-1.5-pro';
+    const model = aiProvidersConfig?.gemini?.model || process.env.GEMINI_MODEL || DEFAULT_MODELS.GEMINI;
     const apiKey = aiProvidersConfig?.gemini?.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     
     const response = await client.post(`/models/${model}:generateContent?key=${apiKey}`, {
@@ -616,7 +617,7 @@ export class CopilotService {
         }]
       }],
       generationConfig: {
-        maxOutputTokens: 4000
+        maxOutputTokens: LIMITS.MAX_API_TOKENS
       }
     });
     
@@ -634,11 +635,11 @@ export class CopilotService {
     } catch {
       aiProvidersConfig = null;
     }
-    const model = aiProvidersConfig?.copilot?.model || process.env.COPILOT_MODEL || 'gpt-4o';
+    const model = aiProvidersConfig?.copilot?.model || process.env.COPILOT_MODEL || DEFAULT_MODELS.COPILOT;
     
     const response = await client.post('/chat/completions', {
       model: model,
-      max_tokens: 4000,
+      max_tokens: LIMITS.MAX_API_TOKENS,
       messages: [
         {
           role: 'user',
@@ -661,7 +662,7 @@ export class CopilotService {
     console.log(chalk.gray('\n🔍 Debug - Raw AI Response:'));
     console.log(chalk.gray(`Provider: ${provider}`));
     console.log(chalk.gray(`Full response structure:`));
-    console.log(chalk.gray(JSON.stringify(response, null, 2).substring(0, 500) + '...'));
+    console.log(chalk.gray(JSON.stringify(response, null, 2).substring(0, LIMITS.MAX_DESCRIPTION_PREVIEW_LENGTH) + '...'));
     console.log(chalk.gray(`Extracted content:`));
     console.log(chalk.gray(`"${content}"`));
     console.log(chalk.gray(`Content length: ${content?.length || 0}`));

@@ -5,18 +5,41 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const chalk = require('chalk');
+const { setupGitExtension } = require('./setup-git-extension');
 
-const CONFIG_FILE = path.join(os.homedir(), '.create-pr', 'env-config.json');
+// Configuration constants
+const CONFIG_DIRECTORY_NAME = '.create-pr';
+const getConfigFilePath()_NAME = 'env-config.json';
+const DEFAULT_GPT_MODEL = DEFAULT_GPT_MODEL;
+const DEFAULT_GEMINI_MODEL = DEFAULT_GEMINI_MODEL;
+const CONFIG_VERSION = CONFIG_VERSION;
+const EXECUTABLE_PERMISSIONS = EXECUTABLE_PERMISSIONS;
+
+function getConfigFilePath() {
+    return path.join(os.homedir(), CONFIG_DIRECTORY_NAME, getConfigFilePath()_NAME);
+}
 
 async function setupEnvironment() {
     console.log(chalk.blue('🚀 Environment Setup Wizard'));
     console.log(chalk.gray('This will collect your environment configuration and save it for global use.\n'));
+
+    // Load existing configuration if available
+    let existingConfig = null;
+    try {
+        if (configExists()) {
+            existingConfig = loadConfig();
+            console.log(chalk.green('✅ Found existing configuration. Using current values as defaults.\n'));
+        }
+    } catch (error) {
+        console.log(chalk.yellow('⚠️  Found config file but could not load it. Starting fresh setup.\n'));
+    }
 
     const questions = [
         {
             type: 'input',
             name: 'jiraBaseUrl',
             message: 'Enter your Jira base URL (e.g., https://your-company.atlassian.net):',
+            default: existingConfig?.jira?.baseUrl || '',
             validate: (input) => {
                 if (!input.trim()) return 'Jira base URL is required';
                 try {
@@ -31,19 +54,34 @@ async function setupEnvironment() {
             type: 'input',
             name: 'jiraUsername',
             message: 'Enter your Jira username/email:',
+            default: existingConfig?.jira?.username || '',
             validate: (input) => input.trim() ? true : 'Jira username is required'
         },
         {
             type: 'password',
             name: 'jiraApiToken',
-            message: 'Enter your Jira API token:',
-            validate: (input) => input.trim() ? true : 'Jira API token is required'
+            message: existingConfig?.jira?.apiToken ? 'Enter your Jira API token (leave blank to keep current):' : 'Enter your Jira API token:',
+            default: '',
+            validate: (input) => {
+                // If there's an existing token and input is blank, that's OK
+                if (existingConfig?.jira?.apiToken && !input.trim()) {
+                    return true;
+                }
+                return input.trim() ? true : 'Jira API token is required';
+            }
         },
         {
             type: 'password',
             name: 'githubToken',
-            message: 'Enter your GitHub personal access token:',
-            validate: (input) => input.trim() ? true : 'GitHub token is required'
+            message: existingConfig?.github?.token ? 'Enter your GitHub personal access token (leave blank to keep current):' : 'Enter your GitHub personal access token:',
+            default: '',
+            validate: (input) => {
+                // If there's an existing token and input is blank, that's OK
+                if (existingConfig?.github?.token && !input.trim()) {
+                    return true;
+                }
+                return input.trim() ? true : 'GitHub token is required';
+            }
         },
         {
             type: 'list',
@@ -55,61 +93,101 @@ async function setupEnvironment() {
                 { name: 'GitHub Copilot', value: 'copilot' },
                 { name: 'Skip AI provider setup', value: 'none' }
             ],
-            default: 'chatgpt'
+            default: existingConfig?.aiProviders?.openai ? 'chatgpt' :
+                     existingConfig?.aiProviders?.gemini ? 'gemini' :
+                     existingConfig?.aiProviders?.copilot || existingConfig?.copilot?.apiToken ? 'copilot' :
+                     'chatgpt'
         },
         {
             type: 'password',
             name: 'openaiApiKey',
-            message: 'Enter your OpenAI API key:',
+            message: (answers) => {
+                const hasExisting = existingConfig?.aiProviders?.openai?.apiKey;
+                return hasExisting ? 'Enter your OpenAI API key (leave blank to keep current):' : 'Enter your OpenAI API key:';
+            },
             when: (answers) => answers.aiProvider === 'chatgpt',
-            validate: (input) => input.trim() ? true : 'OpenAI API key is required for ChatGPT'
+            default: '',
+            validate: (input, answers) => {
+                // If there's an existing key and input is blank, that's OK
+                if (existingConfig?.aiProviders?.openai?.apiKey && !input.trim()) {
+                    return true;
+                }
+                return input.trim() ? true : 'OpenAI API key is required for ChatGPT';
+            }
         },
         {
             type: 'input',
             name: 'openaiModel',
             message: 'Enter OpenAI model to use:',
             when: (answers) => answers.aiProvider === 'chatgpt',
-            default: 'gpt-4o'
+            default: existingConfig?.aiProviders?.openai?.model || DEFAULT_GPT_MODEL
         },
         {
             type: 'password',
             name: 'geminiApiKey',
-            message: 'Enter your Gemini API key:',
+            message: (answers) => {
+                const hasExisting = existingConfig?.aiProviders?.gemini?.apiKey;
+                return hasExisting ? 'Enter your Gemini API key (leave blank to keep current):' : 'Enter your Gemini API key:';
+            },
             when: (answers) => answers.aiProvider === 'gemini',
-            validate: (input) => input.trim() ? true : 'Gemini API key is required for Gemini'
+            default: '',
+            validate: (input) => {
+                // If there's an existing key and input is blank, that's OK
+                if (existingConfig?.aiProviders?.gemini?.apiKey && !input.trim()) {
+                    return true;
+                }
+                return input.trim() ? true : 'Gemini API key is required for Gemini';
+            }
         },
         {
             type: 'input',
             name: 'geminiModel',
             message: 'Enter Gemini model to use:',
             when: (answers) => answers.aiProvider === 'gemini',
-            default: 'gemini-1.5-pro'
+            default: existingConfig?.aiProviders?.gemini?.model || DEFAULT_GEMINI_MODEL
         },
         {
             type: 'password',
             name: 'copilotApiToken',
-            message: 'Enter your GitHub Copilot API token:',
+            message: (answers) => {
+                const hasExisting = existingConfig?.aiProviders?.copilot?.apiToken || existingConfig?.copilot?.apiToken;
+                return hasExisting ? 'Enter your GitHub Copilot API token (leave blank to keep current):' : 'Enter your GitHub Copilot API token:';
+            },
             when: (answers) => answers.aiProvider === 'copilot',
-            validate: (input) => input.trim() ? true : 'GitHub Copilot API token is required for Copilot'
+            default: '',
+            validate: (input) => {
+                // If there's an existing token and input is blank, that's OK
+                const hasExisting = existingConfig?.aiProviders?.copilot?.apiToken || existingConfig?.copilot?.apiToken;
+                if (hasExisting && !input.trim()) {
+                    return true;
+                }
+                return input.trim() ? true : 'GitHub Copilot API token is required for Copilot';
+            }
         },
         {
             type: 'input',
             name: 'copilotModel',
             message: 'Enter Copilot model to use:',
             when: (answers) => answers.aiProvider === 'copilot',
-            default: 'gpt-4o'
+            default: existingConfig?.aiProviders?.copilot?.model || DEFAULT_GPT_MODEL
         },
         {
             type: 'input',
             name: 'defaultBranch',
             message: 'Enter your default branch name:',
-            default: 'main'
+            default: existingConfig?.github?.defaultBranch || 'main'
         },
         {
             type: 'input',
             name: 'jiraProjectKey',
             message: 'Enter your default Jira project key (optional):',
-            default: ''
+            default: existingConfig?.jira?.projectKey || ''
+        },
+        {
+            type: 'confirm',
+            name: 'setupGitExtension',
+            message: 'Set up git extension to enable "git create-pr" command?',
+            default: true
         }
     ];
 
@@ -117,56 +195,58 @@ async function setupEnvironment() {
         const answers = await inquirer.prompt(questions);
         
         // Create config directory if it doesn't exist
-        const configDir = path.dirname(CONFIG_FILE);
+        const configDir = path.dirname(getConfigFilePath());
         if (!fs.existsSync(configDir)) {
             fs.mkdirSync(configDir, { recursive: true });
         }
 
-        // Prepare configuration object
+        // Prepare configuration object, preserving existing values if user left fields blank
         const config = {
             jira: {
                 baseUrl: answers.jiraBaseUrl,
                 username: answers.jiraUsername,
-                apiToken: answers.jiraApiToken,
-                projectKey: answers.jiraProjectKey || null
+                apiToken: answers.jiraApiToken || existingConfig?.jira?.apiToken,
+                projectKey: answers.jiraProjectKey || existingConfig?.jira?.projectKey || null
             },
             github: {
-                token: answers.githubToken,
+                token: answers.githubToken || existingConfig?.github?.token,
                 defaultBranch: answers.defaultBranch
             },
-            aiProviders: {},
+            aiProviders: existingConfig?.aiProviders || {},
             copilot: {
-                apiToken: answers.copilotApiToken || null
+                apiToken: answers.copilotApiToken || existingConfig?.copilot?.apiToken || null
             },
-            createdAt: new Date().toISOString(),
-            version: '1.1.0'
+            createdAt: existingConfig?.createdAt || new Date().toISOString(),
+            updatedAt: existingConfig ? new Date().toISOString() : undefined,
+            version: CONFIG_VERSION
         };
 
         // Configure AI providers based on selection
         if (answers.aiProvider === 'chatgpt') {
             config.aiProviders.openai = {
-                apiKey: answers.openaiApiKey,
-                model: answers.openaiModel || 'gpt-4o'
+                apiKey: answers.openaiApiKey || existingConfig?.aiProviders?.openai?.apiKey,
+                model: answers.openaiModel || existingConfig?.aiProviders?.openai?.model || DEFAULT_GPT_MODEL
             };
         } else if (answers.aiProvider === 'gemini') {
             config.aiProviders.gemini = {
-                apiKey: answers.geminiApiKey,
-                model: answers.geminiModel || 'gemini-1.5-pro'
+                apiKey: answers.geminiApiKey || existingConfig?.aiProviders?.gemini?.apiKey,
+                model: answers.geminiModel || existingConfig?.aiProviders?.gemini?.model || DEFAULT_GEMINI_MODEL
             };
         } else if (answers.aiProvider === 'copilot') {
+            const copilotToken = answers.copilotApiToken || existingConfig?.aiProviders?.copilot?.apiToken || existingConfig?.copilot?.apiToken;
             config.aiProviders.copilot = {
-                apiToken: answers.copilotApiToken,
-                model: answers.copilotModel || 'gpt-4o'
+                apiToken: copilotToken,
+                model: answers.copilotModel || existingConfig?.aiProviders?.copilot?.model || DEFAULT_GPT_MODEL
             };
             // Also keep the legacy copilot config for backward compatibility
-            config.copilot.apiToken = answers.copilotApiToken;
+            config.copilot.apiToken = copilotToken;
         }
 
         // Save configuration to JSON file
-        fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+        fs.writeFileSync(getConfigFilePath(), JSON.stringify(config, null, 2));
 
         console.log(chalk.green('\n✅ Environment configuration saved successfully!'));
-        console.log(chalk.gray(`Global configuration saved to: ${CONFIG_FILE}`));
+        console.log(chalk.gray(`Global configuration saved to: ${getConfigFilePath()}`));
         
         // Also create .env file for backward compatibility
         let envContent = `# Generated by setup-env.js on ${new Date().toISOString()}
@@ -203,7 +283,7 @@ GEMINI_MODEL=${config.aiProviders.gemini.model}
 
         if (config.aiProviders.copilot || config.copilot.apiToken) {
             const token = config.aiProviders.copilot?.apiToken || config.copilot.apiToken;
-            const model = config.aiProviders.copilot?.model || 'gpt-4o';
+            const model = config.aiProviders.copilot?.model || DEFAULT_GPT_MODEL;
             envContent += `COPILOT_API_TOKEN=${token}
 COPILOT_MODEL=${model}
 `;
@@ -217,6 +297,18 @@ COPILOT_MODEL=${model}
         fs.writeFileSync(envFile, envContent);
         console.log(chalk.gray(`Also created .env file for backward compatibility`));
 
+        // Set up git extension if requested
+        if (answers.setupGitExtension) {
+            console.log(chalk.blue('\n🔧 Setting up git extension...'));
+            const gitExtensionSetup = setupGitExtension();
+            if (gitExtensionSetup) {
+                console.log(chalk.green('✅ Git extension setup completed!'));
+                console.log(chalk.gray('You can now use "git create-pr" command after updating your PATH.'));
+            } else {
+                console.log(chalk.yellow('⚠️  Git extension setup encountered issues. You can still use "create-pr" directly.'));
+            }
+        }
+
         console.log(chalk.yellow('\n⚠️  Security Note: Your global configuration contains sensitive tokens. Keep it secure and do not share it.'));
         
     } catch (error) {
@@ -227,12 +319,12 @@ COPILOT_MODEL=${model}
 
 // Helper function to load configuration
 function loadConfig() {
-    if (!fs.existsSync(CONFIG_FILE)) {
+    if (!fs.existsSync(getConfigFilePath())) {
         throw new Error('Configuration file not found. Please run the setup script first.');
     }
     
     try {
-        const configData = fs.readFileSync(CONFIG_FILE, 'utf8');
+        const configData = fs.readFileSync(getConfigFilePath(), 'utf8');
         return JSON.parse(configData);
     } catch (error) {
         throw new Error('Failed to parse configuration file: ' + error.message);
@@ -241,7 +333,7 @@ function loadConfig() {
 
 // Helper function to check if configuration exists
 function configExists() {
-    return fs.existsSync(CONFIG_FILE);
+    return fs.existsSync(getConfigFilePath());
 }
 
 // Helper function to validate configuration
@@ -400,7 +492,7 @@ async function updateConfiguration() {
             name: 'openaiModel',
             message: 'Update OpenAI model:',
             when: (answers) => answers.aiProvider === 'chatgpt',
-            default: currentConfig.aiProviders?.openai?.model || 'gpt-4o'
+            default: currentConfig.aiProviders?.openai?.model || DEFAULT_GPT_MODEL
         });
 
         // Gemini configuration
@@ -417,7 +509,7 @@ async function updateConfiguration() {
             name: 'geminiModel',
             message: 'Update Gemini model:',
             when: (answers) => answers.aiProvider === 'gemini',
-            default: currentConfig.aiProviders?.gemini?.model || 'gemini-1.5-pro'
+            default: currentConfig.aiProviders?.gemini?.model || DEFAULT_GEMINI_MODEL
         });
 
         // Copilot configuration
@@ -434,7 +526,7 @@ async function updateConfiguration() {
             name: 'copilotModel',
             message: 'Update Copilot model:',
             when: (answers) => answers.aiProvider === 'copilot',
-            default: currentConfig.aiProviders?.copilot?.model || 'gpt-4o'
+            default: currentConfig.aiProviders?.copilot?.model || DEFAULT_GPT_MODEL
         });
     }
 
@@ -484,17 +576,17 @@ async function updateConfiguration() {
         if (answers.aiProvider === 'chatgpt') {
             updatedConfig.aiProviders.openai = {
                 apiKey: answers.openaiApiKey,
-                model: answers.openaiModel || 'gpt-4o'
+                model: answers.openaiModel || DEFAULT_GPT_MODEL
             };
         } else if (answers.aiProvider === 'gemini') {
             updatedConfig.aiProviders.gemini = {
                 apiKey: answers.geminiApiKey,
-                model: answers.geminiModel || 'gemini-1.5-pro'
+                model: answers.geminiModel || DEFAULT_GEMINI_MODEL
             };
         } else if (answers.aiProvider === 'copilot') {
             updatedConfig.aiProviders.copilot = {
                 apiToken: answers.copilotApiToken,
-                model: answers.copilotModel || 'gpt-4o'
+                model: answers.copilotModel || DEFAULT_GPT_MODEL
             };
             // Also update legacy copilot config for backward compatibility
             updatedConfig.copilot.apiToken = answers.copilotApiToken;
@@ -506,12 +598,12 @@ async function updateConfiguration() {
     }
 
     updatedConfig.updatedAt = new Date().toISOString();
-    updatedConfig.version = '1.1.0';
+    updatedConfig.version = CONFIG_VERSION;
 
     // Save updated configuration
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(updatedConfig, null, 2));
+    fs.writeFileSync(getConfigFilePath(), JSON.stringify(updatedConfig, null, 2));
     console.log(chalk.green('\n✅ Global configuration updated successfully!'));
-    console.log(chalk.gray(`Updated configuration saved to: ${CONFIG_FILE}`));
+    console.log(chalk.gray(`Updated configuration saved to: ${getConfigFilePath()}`));
 }
 
 // Helper function to get specific config values
@@ -533,7 +625,7 @@ module.exports = {
     getConfig,
     configExists,
     validateConfig,
-    CONFIG_FILE
+    getConfigFilePath()
 };
 
 // Run setup if called directly
