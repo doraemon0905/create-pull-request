@@ -3,6 +3,7 @@ import { JiraTicket } from './jira';
 import { GitChanges, FileChange } from './git';
 import { PullRequestTemplate } from './github';
 import { getConfig } from '../utils/config';
+import * as inquirer from 'inquirer';
 
 export interface GenerateDescriptionOptions {
   jiraTicket: JiraTicket;
@@ -18,50 +19,175 @@ export interface GeneratedPRContent {
   summary?: string;
 }
 
+export type AIProvider = 'chatgpt' | 'gemini' | 'copilot';
+
+export interface AIConfig {
+  provider: AIProvider;
+  apiKey: string;
+  model?: string;
+}
+
 export class CopilotService {
-  private client: AxiosInstance;
+  private clients: Map<AIProvider, AxiosInstance> = new Map();
+  private selectedProvider: AIProvider | null = null;
 
   constructor() {
-    // GitHub Copilot uses the same token as GitHub API
+    this.initializeClients();
+  }
+
+  private initializeClients() {
     const githubConfig = getConfig('github');
     const copilotConfig = getConfig('copilot');
-    const token = githubConfig.token || copilotConfig.apiToken;
-
-    if (!token) {
-      throw new Error('Missing GitHub/Copilot token. Please run "create-pr setup" to configure your credentials.');
+    
+    // Try to get AI providers config
+    let aiProvidersConfig;
+    try {
+      aiProvidersConfig = getConfig('aiProviders');
+    } catch {
+      // Fallback to environment variables if config doesn't exist
+      aiProvidersConfig = null;
+    }
+    
+    // ChatGPT client
+    const chatGptKey = aiProvidersConfig?.openai?.apiKey || 
+                      process.env.OPENAI_API_KEY || 
+                      process.env.CHATGPT_API_KEY;
+    if (chatGptKey) {
+      this.clients.set('chatgpt', axios.create({
+        baseURL: 'https://api.openai.com/v1',
+        headers: {
+          'Authorization': `Bearer ${chatGptKey}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000
+      }));
     }
 
-    this.client = axios.create({
-      baseURL: 'https://api.github.com',
-      headers: {
-        'Authorization': `token ${token}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'User-Agent': 'create-pr-cli'
-      }
-    });
+    // Gemini client
+    const geminiKey = aiProvidersConfig?.gemini?.apiKey || 
+                     process.env.GEMINI_API_KEY || 
+                     process.env.GOOGLE_API_KEY;
+    if (geminiKey) {
+      this.clients.set('gemini', axios.create({
+        baseURL: 'https://generativelanguage.googleapis.com/v1beta',
+        timeout: 30000
+      }));
+    }
+
+    // Copilot client (fallback)
+    const copilotToken = aiProvidersConfig?.copilot?.apiToken ||
+                        copilotConfig.apiToken ||
+                        githubConfig.token;
+    if (copilotToken) {
+      this.clients.set('copilot', axios.create({
+        baseURL: 'https://api.githubcopilot.com',
+        headers: {
+          'Authorization': `Bearer ${copilotToken}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'create-pr-cli'
+        },
+        timeout: 30000
+      }));
+    }
   }
 
   async generatePRDescription(options: GenerateDescriptionOptions): Promise<GeneratedPRContent> {
     try {
-      // First, generate a summary using Copilot
+      // Select AI provider if not already selected
+      if (!this.selectedProvider) {
+        this.selectedProvider = await this.selectAIProvider();
+      }
+
+      // First, generate a summary using selected AI provider
       const summary = await this.generateSummary(options);
       
       // Then generate the full PR description using the summary
       const prompt = this.buildPrompt(options, summary);
-      const response = await this.callCopilotAPI(prompt);
-      const result = this.parseCopilotResponse(response);
+      const response = await this.callAIAPI(prompt, this.selectedProvider);
+      const result = this.parseAIResponse(response, this.selectedProvider);
       
       return {
         ...result,
         summary
       };
     } catch (error) {
-      console.warn('Copilot API unavailable, falling back to template-based generation');
-      return this.generateFallbackDescription(options);
+      console.error(error);
+      console.warn(`${this.selectedProvider || 'AI'} API unavailable, trying fallback providers...`);
+      return this.tryFallbackProviders(options);
     }
   }
 
-  private async generateSummary(options: GenerateDescriptionOptions): Promise<string> {
+  private async selectAIProvider(): Promise<AIProvider> {
+    const availableProviders = Array.from(this.clients.keys());
+    
+    if (availableProviders.length === 0) {
+      throw new Error('No AI providers configured. Please set OPENAI_API_KEY, GEMINI_API_KEY, or configure GitHub Copilot.');
+    }
+
+    // If only one provider available, use it
+    if (availableProviders.length === 1) {
+      const provider = availableProviders[0];
+      console.log(`Using ${provider.toUpperCase()} as AI provider`);
+      return provider;
+    }
+
+    // Prioritize ChatGPT, then Gemini, then Copilot
+    const preferredOrder: AIProvider[] = ['chatgpt', 'gemini', 'copilot'];
+    for (const preferred of preferredOrder) {
+      if (availableProviders.includes(preferred)) {
+        const provider = preferred;
+        console.log(`Using ${provider.toUpperCase()} as primary AI provider`);
+        return provider;
+      }
+    }
+
+    // Prompt user to select if multiple providers available
+    const { selectedProvider } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'selectedProvider',
+        message: 'Multiple AI providers available. Please select one:',
+        choices: availableProviders.map(provider => ({
+          name: provider.toUpperCase(),
+          value: provider
+        })),
+        default: availableProviders.includes('chatgpt') ? 'chatgpt' : availableProviders[0]
+      }
+    ]);
+
+    return selectedProvider;
+  }
+
+  private async tryFallbackProviders(options: GenerateDescriptionOptions): Promise<GeneratedPRContent> {
+    const providers: AIProvider[] = ['chatgpt', 'gemini', 'copilot'];
+    const availableProviders = providers.filter(p => this.clients.has(p));
+    
+    // Remove the already tried provider
+    const remainingProviders = availableProviders.filter(p => p !== this.selectedProvider);
+    
+    for (const provider of remainingProviders) {
+      try {
+        console.log(`Trying fallback provider: ${provider.toUpperCase()}`);
+        const summary = await this.generateSummary(options, provider);
+        const prompt = this.buildPrompt(options, summary);
+        const response = await this.callAIAPI(prompt, provider);
+        const result = this.parseAIResponse(response, provider);
+        
+        console.log(`Successfully used fallback provider: ${provider.toUpperCase()}`);
+        this.selectedProvider = provider;
+        return { ...result, summary };
+      } catch (error) {
+        console.warn(`${provider.toUpperCase()} also failed:`, error);
+        continue;
+      }
+    }
+
+    console.warn('All AI providers failed, falling back to template-based generation');
+    return this.generateFallbackDescription(options);
+  }
+
+  private async generateSummary(options: GenerateDescriptionOptions, provider?: AIProvider): Promise<string> {
+    const targetProvider = provider || this.selectedProvider || 'chatgpt';
     const { jiraTicket, gitChanges, diffContent, template } = options;
 
     let summaryPrompt = `Generate a concise summary of this pull request based on the following information:\n\n`;
@@ -100,8 +226,8 @@ export class CopilotService {
     }
 
     try {
-      const response = await this.callCopilotAPI(summaryPrompt);
-      const content = response.choices[0].message.content;
+      const response = await this.callAIAPI(summaryPrompt, targetProvider);
+      const content = this.extractContentFromResponse(response, targetProvider);
       return content.trim().replace(/["']/g, ''); // Remove quotes
     } catch (error) {
       // Fallback summary that considers template
@@ -213,39 +339,130 @@ export class CopilotService {
     return prompt;
   }
 
-  private async callCopilotAPI(prompt: string): Promise<any> {
-    // Note: This is a placeholder for the actual Copilot API call
-    // The exact API endpoint may vary and might require different authentication
-    // For now, we'll use a mock response structure
-    
+  private async callAIAPI(prompt: string, provider: AIProvider): Promise<any> {
+    const client = this.clients.get(provider);
+    if (!client) {
+      throw new Error(`${provider.toUpperCase()} client not configured`);
+    }
+
     try {
-      // Attempt to use GitHub's chat completion API if available
-      const response = await this.client.post('/copilot/chat/completions', {
-        model: 'gpt-4',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a helpful assistant that generates professional pull request descriptions based on Jira tickets and code changes.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        max_tokens: 1000,
-        temperature: 0.7
-      });
-      
-      return response.data;
+      switch (provider) {
+        case 'chatgpt':
+          return await this.callChatGPTAPI(client, prompt);
+        case 'gemini':
+          return await this.callGeminiAPI(client, prompt);
+        case 'copilot':
+          return await this.callCopilotAPI(client, prompt);
+        default:
+          throw new Error(`Unsupported AI provider: ${provider}`);
+      }
     } catch (error) {
-      // If Copilot API is not available, throw error to fallback
-      throw new Error('Copilot API not available');
+      console.error(`${provider.toUpperCase()} API failed:`, error);
+      throw new Error(`${provider.toUpperCase()} API not available`);
     }
   }
 
-  private parseCopilotResponse(response: any): GeneratedPRContent {
+  private async callChatGPTAPI(client: AxiosInstance, prompt: string): Promise<any> {
+    let aiProvidersConfig;
     try {
-      const content = response.choices[0].message.content;
+      aiProvidersConfig = getConfig('aiProviders');
+    } catch {
+      aiProvidersConfig = null;
+    }
+    const model = aiProvidersConfig?.openai?.model || process.env.OPENAI_MODEL || 'gpt-4o';
+    
+    const response = await client.post('/chat/completions', {
+      model: model,
+      max_tokens: 4000,
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]
+    });
+    
+    if (!response.data.choices[0]?.message?.content) {
+      throw new Error('No content received from ChatGPT API');
+    }
+    
+    return response.data;
+  }
+
+  private async callGeminiAPI(client: AxiosInstance, prompt: string): Promise<any> {
+    let aiProvidersConfig;
+    try {
+      aiProvidersConfig = getConfig('aiProviders');
+    } catch {
+      aiProvidersConfig = null;
+    }
+    const model = aiProvidersConfig?.gemini?.model || process.env.GEMINI_MODEL || 'gemini-1.5-pro';
+    const apiKey = aiProvidersConfig?.gemini?.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    
+    const response = await client.post(`/models/${model}:generateContent?key=${apiKey}`, {
+      contents: [{
+        parts: [{
+          text: prompt
+        }]
+      }],
+      generationConfig: {
+        maxOutputTokens: 4000
+      }
+    });
+    
+    if (!response.data.candidates?.[0]?.content?.parts?.[0]?.text) {
+      throw new Error('No content received from Gemini API');
+    }
+    
+    return response.data;
+  }
+
+  private async callCopilotAPI(client: AxiosInstance, prompt: string): Promise<any> {
+    let aiProvidersConfig;
+    try {
+      aiProvidersConfig = getConfig('aiProviders');
+    } catch {
+      aiProvidersConfig = null;
+    }
+    const model = aiProvidersConfig?.copilot?.model || process.env.COPILOT_MODEL || 'gpt-4o';
+    
+    const response = await client.post('/chat/completions', {
+      model: model,
+      max_tokens: 4000,
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]
+    });
+    
+    if (!response.data.choices[0]?.message?.content) {
+      throw new Error('No content received from Copilot API');
+    }
+    
+    return response.data;
+  }
+
+  private parseAIResponse(response: any, provider: AIProvider): GeneratedPRContent {
+    const content = this.extractContentFromResponse(response, provider);
+    return this.parseResponseContent(content);
+  }
+
+  private extractContentFromResponse(response: any, provider: AIProvider): string {
+    switch (provider) {
+      case 'chatgpt':
+      case 'copilot':
+        return response.choices[0].message.content;
+      case 'gemini':
+        return response.candidates[0].content.parts[0].text;
+      default:
+        throw new Error(`Unsupported provider for content extraction: ${provider}`);
+    }
+  }
+
+  private parseResponseContent(content: string): GeneratedPRContent {
+    try {
       const parsed = JSON.parse(content);
       
       return {
@@ -254,8 +471,6 @@ export class CopilotService {
       };
     } catch {
       // If parsing fails, extract content manually
-      const content = response.choices[0].message.content;
-      
       return {
         title: this.extractTitle(content) || 'Auto-generated PR title',
         body: content

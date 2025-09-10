@@ -13,14 +13,29 @@ export interface GeneratedPRContent {
     body: string;
     summary?: string;
 }
+export type AIProvider = 'chatgpt' | 'gemini' | 'copilot';
+export interface AIConfig {
+    provider: AIProvider;
+    apiKey: string;
+    model?: string;
+}
 export declare class CopilotService {
-    private client;
+    private clients;
+    private selectedProvider;
     constructor();
+    private initializeClients;
     generatePRDescription(options: GenerateDescriptionOptions): Promise<GeneratedPRContent>;
+    private selectAIProvider;
+    private tryFallbackProviders;
     private generateSummary;
     private buildPrompt;
+    private callAIAPI;
+    private callChatGPTAPI;
+    private callGeminiAPI;
     private callCopilotAPI;
-    private parseCopilotResponse;
+    private parseAIResponse;
+    private extractContentFromResponse;
+    private parseResponseContent;
     private extractTitle;
     private generateFallbackDescription;
     private getFileRelevanceDescription;

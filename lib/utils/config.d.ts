@@ -11,10 +11,25 @@ export interface GitHubConfig {
 export interface CopilotConfig {
     apiToken?: string | null;
 }
+export interface AIProvidersConfig {
+    openai?: {
+        apiKey?: string | null;
+        model?: string;
+    };
+    gemini?: {
+        apiKey?: string | null;
+        model?: string;
+    };
+    copilot?: {
+        apiToken?: string | null;
+        model?: string;
+    };
+}
 export interface EnvironmentConfig {
     jira: JiraConfig;
     github: GitHubConfig;
     copilot: CopilotConfig;
+    aiProviders?: AIProvidersConfig;
     createdAt: string;
     version: string;
 }

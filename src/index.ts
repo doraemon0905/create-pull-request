@@ -53,11 +53,17 @@ program
     console.log(chalk.yellow('   JIRA_BASE_URL') + '=https://your-company.atlassian.net');
     console.log(chalk.yellow('   JIRA_USERNAME') + '=your-email@company.com');
     console.log(chalk.yellow('   JIRA_API_TOKEN') + '=your-jira-api-token');
-    console.log(chalk.yellow('   GITHUB_TOKEN') + '=your-github-personal-access-token\n');
+    console.log(chalk.yellow('   GITHUB_TOKEN') + '=your-github-personal-access-token');
+    console.log('\n🤖 ' + chalk.bold('AI Providers (Primary: ChatGPT → Fallback: Gemini → Copilot):'));
+    console.log(chalk.yellow('   OPENAI_API_KEY') + '=your-openai-api-key ' + chalk.gray('(recommended)'));
+    console.log(chalk.yellow('   GEMINI_API_KEY') + '=your-gemini-api-key ' + chalk.gray('(fallback)'));
+    console.log(chalk.yellow('   COPILOT_API_TOKEN') + '=your-copilot-api-token ' + chalk.gray('(legacy)\n'));
     
     console.log('📝 ' + chalk.bold('Important notes:'));
     console.log('• Make sure your GitHub token has repo permissions');
     console.log('• For Jira, generate an API token from your Atlassian account settings');
+    console.log('• The tool will automatically prioritize ChatGPT → Gemini → Copilot');
+    console.log('• At least one AI provider is required for generating PR descriptions');
     console.log('• The setup wizard creates a global config file for easier management');
   });
 

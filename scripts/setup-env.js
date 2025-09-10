@@ -149,6 +149,14 @@ function validateConfig(config) {
         { path: 'jira.apiToken', description: 'Jira API token' },
         { path: 'github.token', description: 'GitHub token' }
     ];
+    
+    // Check if at least one AI provider is configured
+    const hasAIProvider = config.aiProviders && (
+        config.aiProviders.openai?.apiKey ||
+        config.aiProviders.gemini?.apiKey ||
+        config.aiProviders.copilot?.apiToken ||
+        config.copilot?.apiToken
+    );
 
     const missing = [];
     

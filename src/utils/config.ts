@@ -18,10 +18,26 @@ export interface CopilotConfig {
     apiToken?: string | null;
 }
 
+export interface AIProvidersConfig {
+    openai?: {
+        apiKey?: string | null;
+        model?: string;
+    };
+    gemini?: {
+        apiKey?: string | null;
+        model?: string;
+    };
+    copilot?: {
+        apiToken?: string | null;
+        model?: string;
+    };
+}
+
 export interface EnvironmentConfig {
     jira: JiraConfig;
     github: GitHubConfig;
     copilot: CopilotConfig;
+    aiProviders?: AIProvidersConfig;
     createdAt: string;
     version: string;
 }
@@ -61,7 +77,11 @@ export function getConfigValue<T extends keyof EnvironmentConfig, K extends keyo
     key: K
 ): EnvironmentConfig[T][K] {
     const config = loadConfig();
-    return config[section][key];
+    const sectionConfig = config[section];
+    if (sectionConfig && typeof sectionConfig === 'object') {
+        return (sectionConfig as any)[key];
+    }
+    throw new Error(`Configuration section '${String(section)}' not found or invalid`);
 }
 
 /**

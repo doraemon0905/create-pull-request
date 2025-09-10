@@ -1,12 +1,12 @@
 # Create Pull Request CLI
 
-A CLI tool that automatically generates pull request descriptions based on Jira tickets and file changes using GitHub Copilot API.
+A CLI tool that automatically generates pull request descriptions based on Jira tickets and file changes using AI providers (ChatGPT, Gemini, or GitHub Copilot).
 
 ## Features
 
 - 🎫 **Jira Integration**: Automatically fetches ticket information from Jira
 - 🔄 **Git Analysis**: Analyzes file changes and commit history
-- 🤖 **AI-Powered**: Uses GitHub Copilot API to generate intelligent PR descriptions
+- 🤖 **AI-Powered**: Uses multiple AI providers (ChatGPT → Gemini → Copilot) to generate intelligent PR descriptions
 - 📋 **Template Support**: Automatically detects and uses PR templates from your repository
 - ✅ **User Review**: Always asks for user confirmation before creating the PR
 - 🏃‍♂️ **Dry Run Mode**: Preview generated content without creating a PR
@@ -27,6 +27,16 @@ npm install publish-pull-request
 
 ## Setup
 
+### Option 1: Interactive Setup (Recommended)
+
+```bash
+create-pr setup
+```
+
+This will guide you through setting up all required credentials and AI providers.
+
+### Option 2: Manual Setup
+
 1. Copy the environment example file:
    ```bash
    cp .env.example .env
@@ -41,17 +51,45 @@ npm install publish-pull-request
 
    # GitHub Configuration
    GITHUB_TOKEN=your-github-personal-access-token
+
+   # AI Providers (at least one required)
+   # Primary: OpenAI/ChatGPT (recommended)
+   OPENAI_API_KEY=your-openai-api-key
+   OPENAI_MODEL=gpt-4o
+
+   # Fallback: Google Gemini
+   GEMINI_API_KEY=your-gemini-api-key
+   GEMINI_MODEL=gemini-1.5-pro
+
+   # Legacy: GitHub Copilot
+   COPILOT_API_TOKEN=your-copilot-api-token
    ```
 
-3. For Jira API token:
-   - Go to [Atlassian Account Settings](https://id.atlassian.com/manage-profile/security/api-tokens)
-   - Create a new API token
-   - Copy the token to your `.env` file
+### Getting API Keys
 
-4. For GitHub token:
-   - Go to [GitHub Settings > Developer settings > Personal access tokens](https://github.com/settings/tokens)
-   - Generate a new token with `repo` permissions
-   - Copy the token to your `.env` file
+**Jira API Token:**
+- Go to [Atlassian Account Settings](https://id.atlassian.com/manage-profile/security/api-tokens)
+- Create a new API token
+- Copy the token to your configuration
+
+**GitHub Token:**
+- Go to [GitHub Settings > Developer settings > Personal access tokens](https://github.com/settings/tokens)
+- Generate a new token with `repo` permissions
+- Copy the token to your configuration
+
+**OpenAI API Key (Recommended):**
+- Go to [OpenAI API Keys](https://platform.openai.com/api-keys)
+- Create a new secret key
+- Copy the key to your configuration
+
+**Google Gemini API Key (Fallback):**
+- Go to [Google AI Studio](https://aistudio.google.com/app/apikey)
+- Create a new API key
+- Copy the key to your configuration
+
+**GitHub Copilot API Token (Legacy):**
+- Uses the same token as GitHub API
+- Or get a separate Copilot API token if available
 
 ## Usage
 
@@ -77,6 +115,7 @@ create-pr create --jira PROJ-123 --dry-run
 ### Available Commands
 
 - `create-pr create` - Create a pull request with auto-generated description
+- `create-pr setup` - Interactive setup wizard for credentials and AI providers
 - `create-pr config` - Show configuration setup instructions
 - `create-pr --help` - Show help information
 
@@ -93,9 +132,37 @@ create-pr create --jira PROJ-123 --dry-run
 2. **Jira Integration**: Fetches ticket details including summary, description, and metadata
 3. **Git Analysis**: Analyzes file changes, commit messages, and diff content
 4. **Template Detection**: Looks for PR templates in your repository
-5. **AI Generation**: Uses GitHub Copilot API to generate intelligent descriptions
-6. **User Review**: Shows generated content and asks for confirmation
-7. **PR Creation**: Creates the pull request on GitHub
+5. **AI Provider Selection**: Automatically selects the best available AI provider (ChatGPT → Gemini → Copilot)
+6. **AI Generation**: Uses the selected AI provider to generate intelligent descriptions with automatic fallback
+7. **User Review**: Shows generated content and asks for confirmation
+8. **PR Creation**: Creates the pull request on GitHub
+
+## AI Provider Priority
+
+The tool uses AI providers in the following priority order:
+
+1. **ChatGPT (OpenAI)** - Primary provider
+   - Most reliable and consistent results
+   - Fast response times
+   - Excellent understanding of code context
+
+2. **Gemini (Google)** - Fallback provider
+   - Good alternative when ChatGPT is unavailable
+   - Strong analytical capabilities
+   - Handles complex code changes well
+
+3. **GitHub Copilot** - Legacy provider
+   - May have stability issues
+   - Uses GitHub infrastructure
+   - Fallback option for existing setups
+
+If multiple providers are configured, the tool will automatically:
+- Try ChatGPT first
+- Fall back to Gemini if ChatGPT fails
+- Fall back to Copilot if both ChatGPT and Gemini fail
+- Use template-based generation if all AI providers fail
+
+You can configure multiple providers for maximum reliability.
 
 ## Supported PR Template Locations
 
@@ -151,6 +218,10 @@ Title: PROJ-123: Implement user authentication
 - Git repository
 - Jira account with API access
 - GitHub account with repository access
+- At least one AI provider:
+  - **OpenAI API key** (recommended) - Most reliable and fastest
+  - **Google Gemini API key** (fallback) - Good alternative option
+  - **GitHub Copilot API token** (legacy) - May have availability issues
 
 ## Development
 
@@ -194,14 +265,20 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 1. **Authentication Error**: Make sure your Jira and GitHub tokens are correct and have proper permissions
 2. **Template Not Found**: PR templates are optional. The tool will use a default format if none are found
 3. **No Changes Detected**: Make sure you're on a feature branch with changes compared to the base branch
-4. **Copilot API Unavailable**: The tool falls back to template-based generation if Copilot API is unavailable
+4. **AI Provider Issues**: 
+   - If ChatGPT fails, the tool automatically falls back to Gemini, then Copilot
+   - If all AI providers fail, the tool uses template-based generation
+   - Run `create-pr setup` to configure additional AI providers
+5. **No AI Providers Configured**: At least one AI provider must be configured. Run `create-pr setup` to configure providers
 
 ### Getting Help
 
-- Run `create-pr config` for setup instructions
+- Run `create-pr setup` for interactive setup wizard
+- Run `create-pr config` for manual setup instructions
 - Check that all environment variables are set correctly
 - Ensure you're in a git repository with a GitHub origin remote
+- Verify at least one AI provider is properly configured
 
 ## Support
 
-If you encounter any issues or have questions, please [open an issue](https://github.com/your-username/create-pull-request/issues) on GitHub.
+If you encounter any issues or have questions, please [open an issue](https://github.com/doraemon0905/create-pull-request/issues) on GitHub.
