@@ -137,12 +137,25 @@ export async function createPullRequest(options: CreatePROptions): Promise<void>
       gitChanges,
       template: selectedTemplate,
       diffContent,
-      prTitle: options.title
+      prTitle: options.title,
+      repoInfo: {
+        owner: repo.owner,
+        repo: repo.repo,
+        currentBranch: currentBranch
+      }
     });
     spinner.succeed('Pull request description generated');
 
     // Show generated content for review
     console.log(chalk.blue('\n📝 Generated Pull Request:'));
+    
+    // Display summary if available
+    if (generatedContent.summary) {
+      console.log(chalk.bold('Summary:'));
+      console.log(chalk.cyan(generatedContent.summary));
+      console.log();
+    }
+    
     console.log(chalk.bold('Title:'));
     console.log(generatedContent.title);
     console.log(chalk.bold('\nDescription:'));
@@ -167,25 +180,48 @@ export async function createPullRequest(options: CreatePROptions): Promise<void>
 
     let finalTitle = generatedContent.title;
     let finalBody = generatedContent.body;
+    let finalSummary = generatedContent.summary;
+
+    // Debug: Log what AI generated
+    console.log(chalk.gray('\n🔍 Debug - AI Generated Content:'));
+    console.log(chalk.gray(`Title: "${generatedContent.title}"`));
+    console.log(chalk.gray(`Summary: "${generatedContent.summary}"`));
+    console.log(chalk.gray(`Body length: ${generatedContent.body?.length || 0} characters`));
 
     if (action === 'edit') {
-      const { editedTitle, editedBody } = await inquirer.prompt([
+      const editPrompts = [
         {
           type: 'input',
           name: 'editedTitle',
           message: 'Enter pull request title:',
           default: finalTitle
-        },
-        {
-          type: 'editor',
-          name: 'editedBody',
-          message: 'Edit pull request description:',
-          default: finalBody
         }
-      ]);
+      ];
 
-      finalTitle = editedTitle;
-      finalBody = editedBody;
+      // Add summary editing if summary exists
+      if (generatedContent.summary) {
+        editPrompts.push({
+          type: 'input',
+          name: 'editedSummary',
+          message: 'Edit pull request summary:',
+          default: finalSummary || ''
+        });
+      }
+
+      editPrompts.push({
+        type: 'editor',
+        name: 'editedBody',
+        message: 'Edit pull request description:',
+        default: finalBody
+      });
+
+      const editedContent = await inquirer.prompt(editPrompts);
+
+      finalTitle = editedContent.editedTitle;
+      finalBody = editedContent.editedBody;
+      if (editedContent.editedSummary !== undefined) {
+        finalSummary = editedContent.editedSummary;
+      }
     }
 
     // Create pull request or show dry run
@@ -195,27 +231,59 @@ export async function createPullRequest(options: CreatePROptions): Promise<void>
       console.log(chalk.bold('From:'), currentBranch);
       console.log(chalk.bold('To:'), baseBranch);
       console.log(chalk.bold('Title:'), finalTitle);
+      if (finalSummary) {
+        console.log(chalk.bold('Summary:'), finalSummary);
+      }
       console.log(chalk.bold('Draft:'), options.draft ? 'Yes' : 'No');
       console.log(chalk.bold('Body:'), finalBody);
       console.log(chalk.green('\n✅ Dry run completed. No pull request was created.'));
     } else {
-      spinner.start('Creating pull request on GitHub...');
+      // Final validation before creating PR - provide fallbacks only if needed
+      if (!finalTitle || finalTitle.trim() === '') {
+        finalTitle = `${jiraTicket}: Auto-generated PR title`;
+        console.log(chalk.yellow('⚠️  Warning: Using fallback title as AI did not generate a valid title'));
+      }
+      if (!finalBody || finalBody.trim() === '') {
+        finalBody = 'Auto-generated PR description';
+        console.log(chalk.yellow('⚠️  Warning: Using fallback body as AI did not generate a valid description'));
+      }
+      if (!currentBranch || currentBranch.trim() === '') {
+        throw new Error('Current branch cannot be empty');
+      }
+      if (!baseBranch || baseBranch.trim() === '') {
+        throw new Error('Base branch cannot be empty');
+      }
+
+      spinner.start('Creating or updating pull request on GitHub...');
       
-      const pullRequest = await githubService.createPullRequest(repo, {
-        title: finalTitle,
-        body: finalBody,
-        head: currentBranch,
-        base: baseBranch,
+      // Ensure current branch is pushed to remote
+      spinner.start('Ensuring branch is pushed to remote...');
+      await gitService.pushCurrentBranch();
+      
+      spinner.start('Creating or updating pull request on GitHub...');
+      
+      const result = await githubService.createOrUpdatePullRequest(repo, {
+        title: finalTitle.trim(),
+        body: finalBody.trim(),
+        head: currentBranch.trim(),
+        base: baseBranch.trim(),
         draft: options.draft
       });
 
+      const pullRequest = result.data;
+      const isUpdate = result.isUpdate;
       const draftText = options.draft ? ' draft' : '';
-      spinner.succeed(`Pull request${draftText} created successfully!`);
+      const actionText = isUpdate ? 'updated' : 'created';
       
-      console.log(chalk.green(`\n🎉${options.draft ? ' Draft' : ''} Pull Request Created:`));
+      spinner.succeed(`Pull request${draftText} ${actionText} successfully!`);
+      
+      console.log(chalk.green(`\n🎉${options.draft ? ' Draft' : ''} Pull Request ${isUpdate ? 'Updated' : 'Created'}:`));
       console.log(chalk.bold('URL:'), pullRequest.html_url);
       console.log(chalk.bold('Number:'), `#${pullRequest.number}`);
       console.log(chalk.bold('Title:'), pullRequest.title);
+      if (isUpdate) {
+        console.log(chalk.blue('🔄 Note: Updated existing pull request for this branch'));
+      }
       if (options.draft) {
         console.log(chalk.yellow('📝 Note: This is a draft pull request'));
       }

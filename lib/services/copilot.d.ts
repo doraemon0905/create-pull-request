@@ -7,6 +7,11 @@ export interface GenerateDescriptionOptions {
     template?: PullRequestTemplate;
     diffContent?: string;
     prTitle?: string;
+    repoInfo?: {
+        owner: string;
+        repo: string;
+        currentBranch: string;
+    };
 }
 export interface GeneratedPRContent {
     title: string;
@@ -34,12 +39,15 @@ export declare class CopilotService {
     private callGeminiAPI;
     private callCopilotAPI;
     private parseAIResponse;
+    private isValidJSON;
+    private cleanJSONResponse;
     private extractContentFromResponse;
     private parseResponseContent;
     private extractTitle;
     private generateFallbackDescription;
     private getFileRelevanceDescription;
     private generateFallbackSummary;
+    private generateEnhancedFallbackSummary;
     private generateShortTitle;
     private getActionFromIssueType;
     private extractSubjectFromSummary;

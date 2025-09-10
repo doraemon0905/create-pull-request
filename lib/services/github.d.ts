@@ -14,12 +14,19 @@ export interface PullRequestTemplate {
     content: string;
 }
 export declare class GitHubService {
-    private client;
+    private octokit;
     private git;
     constructor();
     getCurrentRepo(): Promise<GitHubRepo>;
     getPullRequestTemplates(repo: GitHubRepo): Promise<PullRequestTemplate[]>;
+    findExistingPullRequest(repo: GitHubRepo, branch: string): Promise<any | null>;
+    updatePullRequest(repo: GitHubRepo, pullNumber: number, pullRequest: Partial<PullRequest>): Promise<any>;
+    createOrUpdatePullRequest(repo: GitHubRepo, pullRequest: PullRequest): Promise<{
+        data: any;
+        isUpdate: boolean;
+    }>;
     createPullRequest(repo: GitHubRepo, pullRequest: PullRequest): Promise<any>;
+    private validatePullRequestData;
     getCurrentBranch(): Promise<string>;
     validateConnection(): Promise<boolean>;
 }

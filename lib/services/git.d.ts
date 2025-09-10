@@ -28,5 +28,6 @@ export declare class GitService {
     branchExists(branchName: string): Promise<boolean>;
     private mapGitStatus;
     private extractLineNumbers;
+    pushCurrentBranch(): Promise<void>;
 }
 //# sourceMappingURL=git.d.ts.map

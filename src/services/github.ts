@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
+import { Octokit } from '@octokit/rest';
 import { simpleGit, SimpleGit } from 'simple-git';
 import { getConfig } from '../utils/config';
 
@@ -21,7 +21,7 @@ export interface PullRequestTemplate {
 }
 
 export class GitHubService {
-  private client: AxiosInstance;
+  private octokit: Octokit;
   private git: SimpleGit;
 
   constructor() {
@@ -31,13 +31,9 @@ export class GitHubService {
       throw new Error('Missing GitHub token. Please run "create-pr setup" to configure your credentials.');
     }
 
-    this.client = axios.create({
-      baseURL: 'https://api.github.com',
-      headers: {
-        'Authorization': `token ${githubConfig.token}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'User-Agent': 'create-pr-cli'
-      }
+    this.octokit = new Octokit({
+      auth: githubConfig.token,
+      userAgent: 'create-pr-cli'
     });
 
     this.git = simpleGit();
@@ -80,8 +76,13 @@ export class GitHubService {
 
     for (const path of possiblePaths) {
       try {
-        const response = await this.client.get(`/repos/${repo.owner}/${repo.repo}/contents/${path}`);
-        if (response.data.type === 'file') {
+        const response = await this.octokit.rest.repos.getContent({
+          owner: repo.owner,
+          repo: repo.repo,
+          path: path
+        });
+        
+        if ('content' in response.data && response.data.type === 'file') {
           const content = Buffer.from(response.data.content, 'base64').toString('utf-8');
           templates.push({
             name: path.includes('/') ? path.split('/').pop()! : path,
@@ -95,16 +96,28 @@ export class GitHubService {
 
     // Check for multiple templates in .github/PULL_REQUEST_TEMPLATE directory
     try {
-      const response = await this.client.get(`/repos/${repo.owner}/${repo.repo}/contents/.github/PULL_REQUEST_TEMPLATE`);
+      const response = await this.octokit.rest.repos.getContent({
+        owner: repo.owner,
+        repo: repo.repo,
+        path: '.github/PULL_REQUEST_TEMPLATE'
+      });
+      
       if (Array.isArray(response.data)) {
         for (const file of response.data) {
           if (file.type === 'file' && file.name.endsWith('.md')) {
-            const fileResponse = await this.client.get(`/repos/${repo.owner}/${repo.repo}/contents/${file.path}`);
-            const content = Buffer.from(fileResponse.data.content, 'base64').toString('utf-8');
-            templates.push({
-              name: file.name,
-              content
+            const fileResponse = await this.octokit.rest.repos.getContent({
+              owner: repo.owner,
+              repo: repo.repo,
+              path: file.path
             });
+            
+            if ('content' in fileResponse.data && fileResponse.data.type === 'file') {
+              const content = Buffer.from(fileResponse.data.content, 'base64').toString('utf-8');
+              templates.push({
+                name: file.name,
+                content
+              });
+            }
           }
         }
       }
@@ -115,22 +128,135 @@ export class GitHubService {
     return templates;
   }
 
-  async createPullRequest(repo: GitHubRepo, pullRequest: PullRequest): Promise<any> {
+  async findExistingPullRequest(repo: GitHubRepo, branch: string): Promise<any | null> {
     try {
-      const response = await this.client.post(`/repos/${repo.owner}/${repo.repo}/pulls`, pullRequest);
-      return response.data;
+      const response = await this.octokit.rest.pulls.list({
+        owner: repo.owner,
+        repo: repo.repo,
+        head: `${repo.owner}:${branch}`,
+        state: 'open'
+      });
+      
+      return response.data.length > 0 ? response.data[0] : null;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 422) {
-          throw new Error(`Failed to create pull request: ${error.response.data.message}`);
-        } else if (error.response?.status === 401) {
-          throw new Error('Authentication failed. Please check your GitHub token.');
-        } else if (error.response?.status === 403) {
-          throw new Error('Access denied. Please check your GitHub token permissions.');
-        }
-        throw new Error(`GitHub API error: ${error.response?.data?.message || error.message}`);
+      console.warn('Failed to check for existing pull request:', error);
+      return null;
+    }
+  }
+
+  async updatePullRequest(repo: GitHubRepo, pullNumber: number, pullRequest: Partial<PullRequest>): Promise<any> {
+    try {
+      const response = await this.octokit.rest.pulls.update({
+        owner: repo.owner,
+        repo: repo.repo,
+        pull_number: pullNumber,
+        title: pullRequest.title,
+        body: pullRequest.body,
+        base: pullRequest.base,
+        draft: pullRequest.draft
+      });
+      return response.data;
+    } catch (error: any) {
+      if (error.status === 401) {
+        throw new Error('Authentication failed. Please check your GitHub token.');
+      } else if (error.status === 403) {
+        throw new Error('Access denied. Please check your GitHub token permissions.');
+      } else if (error.status === 404) {
+        throw new Error('Pull request not found.');
       }
-      throw error;
+      throw new Error(`GitHub API error: ${error.message}`);
+    }
+  }
+
+  async createOrUpdatePullRequest(repo: GitHubRepo, pullRequest: PullRequest): Promise<{ data: any; isUpdate: boolean }> {
+    // First, check if a pull request already exists for this branch
+    const existingPR = await this.findExistingPullRequest(repo, pullRequest.head);
+    
+    if (existingPR) {
+      // Update the existing pull request
+      const updatedPR = await this.updatePullRequest(repo, existingPR.number, {
+        title: pullRequest.title,
+        body: pullRequest.body,
+        base: pullRequest.base,
+        draft: pullRequest.draft
+      });
+      return { data: updatedPR, isUpdate: true };
+    } else {
+      // Create a new pull request
+      const newPR = await this.createPullRequest(repo, pullRequest);
+      return { data: newPR, isUpdate: false };
+    }
+  }
+
+  async createPullRequest(repo: GitHubRepo, pullRequest: PullRequest): Promise<any> {
+    // Validate required fields before making the API call
+    this.validatePullRequestData(pullRequest);
+    
+    const prData = {
+      owner: repo.owner,
+      repo: repo.repo,
+      title: pullRequest.title,
+      body: pullRequest.body,
+      head: pullRequest.head,
+      base: pullRequest.base,
+      draft: pullRequest.draft
+    };
+    
+    console.log('Creating PR with data:', prData);
+    
+    try {
+      const response = await this.octokit.rest.pulls.create(prData);
+      return response.data;
+    } catch (error: any) {
+      console.error('GitHub API Error Details:', {
+        status: error.status,
+        message: error.message,
+        response: error.response?.data
+      });
+      throw new Error(`GitHub API error: ${error.message}`);
+    }
+  }
+
+  private validatePullRequestData(pullRequest: PullRequest): void {
+    const errors: string[] = [];
+
+    if (!pullRequest.title || pullRequest.title.trim() === '') {
+      errors.push('Title is required and cannot be empty');
+    }
+
+    if (!pullRequest.head || pullRequest.head.trim() === '') {
+      errors.push('Head branch is required and cannot be empty');
+    }
+
+    if (!pullRequest.base || pullRequest.base.trim() === '') {
+      errors.push('Base branch is required and cannot be empty');
+    }
+
+    if (!pullRequest.body || pullRequest.body.trim() === '') {
+      errors.push('Body is required and cannot be empty');
+    }
+
+    // Check for title length (GitHub has limits)
+    if (pullRequest.title && pullRequest.title.length > 256) {
+      errors.push('Title is too long (maximum 256 characters)');
+    }
+
+    if (pullRequest.head === pullRequest.base) {
+      errors.push('Head branch cannot be the same as base branch');
+    }
+
+    // Debug: Log what we're validating
+    console.log('Validating PR data:', {
+      title: pullRequest.title?.substring(0, 50) + '...',
+      titleLength: pullRequest.title?.length,
+      head: pullRequest.head,
+      base: pullRequest.base,
+      bodyLength: pullRequest.body?.length,
+      body: pullRequest.body
+    });
+
+    if (errors.length > 0) {
+      throw new Error(`Pull request validation failed:\n${errors.map(e => `- ${e}`).join('\n')}`);
     }
   }
 
@@ -145,7 +271,7 @@ export class GitHubService {
 
   async validateConnection(): Promise<boolean> {
     try {
-      await this.client.get('/user');
+      await this.octokit.rest.users.getAuthenticated();
       return true;
     } catch {
       return false;

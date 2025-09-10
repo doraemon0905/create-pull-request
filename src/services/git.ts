@@ -198,4 +198,13 @@ export class GitService {
     
     return { added, removed };
   }
+
+  async pushCurrentBranch(): Promise<void> {
+    try {
+      const currentBranch = await this.getCurrentBranch();
+      await this.git.push('origin', currentBranch, ['--set-upstream']);
+    } catch (error) {
+      throw new Error(`Failed to push current branch: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
 }
