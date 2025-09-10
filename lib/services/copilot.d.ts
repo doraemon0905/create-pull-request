@@ -51,5 +51,6 @@ export declare class CopilotService {
     private generateShortTitle;
     private getActionFromIssueType;
     private extractSubjectFromSummary;
+    private extractDiffSummary;
 }
 //# sourceMappingURL=copilot.d.ts.map
