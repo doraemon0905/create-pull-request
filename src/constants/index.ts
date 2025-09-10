@@ -59,7 +59,7 @@ export const FILE_PATHS = {
 // Regular Expressions
 export const REGEX_PATTERNS = {
   JIRA_TICKET: /^[A-Z][A-Z0-9]*-\d+$/,
-  JIRA_TICKET_FROM_BRANCH: /(?:^|[\/\-_])([A-Z][A-Z0-9]*-\d+)(?:[\/\-_]|$)/i,
+  JIRA_TICKET_FROM_BRANCH: /(?:^|[/\-_])([A-Z][A-Z0-9]*-\d+)(?:[/\-_]|$)/i,
   GITHUB_URL: /github\.com[/:]([\w-]+)\/([\w-]+)(?:\.git)?/
 } as const;
 
