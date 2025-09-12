@@ -133,6 +133,9 @@ jobs:
             // Auto-merge the PR if it's a patch version
             if (process.env.VERSION_TYPE === 'patch') {
               try {
+                // Wait a moment for the PR to be fully created
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
                 await github.rest.pulls.merge({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
@@ -143,6 +146,10 @@ jobs:
                 console.log(`✅ Auto-merged PR #${pullRequest.number} (patch version)`);
               } catch (error) {
                 console.log(`ℹ️ Could not auto-merge PR: ${error.message}`);
+                if (error.response) {
+                  console.log(`📊 Response status: ${error.response.status}`);
+                  console.log(`📊 Response data: ${JSON.stringify(error.response.data, null, 2)}`);
+                }
                 console.log(`📋 Please manually review and merge PR #${pullRequest.number}`);
               }
             } else {
