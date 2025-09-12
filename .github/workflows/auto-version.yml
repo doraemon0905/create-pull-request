@@ -41,8 +41,8 @@ jobs:
       
       - name: 🔍 Configure Git
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "Bradley Nguyen"
+          git config user.email "nguyentruonggiang91@gmail.com"
       
       - name: 📋 Get PR Information
         id: pr-info
@@ -59,7 +59,7 @@ jobs:
           echo "🏷️ Running auto version update script..."
           
           # Set environment variables for the script
-          export GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          export GITHUB_TOKEN="${{ secrets.GH_TOKEN }}"
           export CI=true
           export GITHUB_ACTIONS=true
           export GITHUB_ACTOR="${{ github.actor }}"
