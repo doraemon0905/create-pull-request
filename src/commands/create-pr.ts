@@ -4,7 +4,7 @@ import ora from 'ora';
 import { JiraService } from '../services/jira';
 import { GitHubService } from '../services/github';
 import { GitService } from '../services/git';
-import { CopilotService } from '../services/copilot';
+import { AIDescriptionGeneratorService } from '../services/ai-description-generator';
 import { validateJiraTicket, validateGitRepository, extractJiraTicketFromBranch } from '../utils/validation';
 import { CONFIG } from '../constants';
 
@@ -27,7 +27,7 @@ export async function createPullRequest(options: CreatePROptions): Promise<void>
     const jiraService = new JiraService();
     const githubService = new GitHubService();
     const gitService = new GitService();
-    const copilotService = new CopilotService();
+    const aiDescriptionService = new AIDescriptionGeneratorService();
 
     // Validate git repository
     await gitService.validateRepository();
@@ -148,7 +148,7 @@ export async function createPullRequest(options: CreatePROptions): Promise<void>
 
     // Generate PR description using Copilot
     spinner.start('Generating pull request description with AI...');
-    const generatedContent = await copilotService.generatePRDescription({
+    const generatedContent = await aiDescriptionService.generatePRDescription({
       jiraTicket: ticketInfo,
       gitChanges,
       template: selectedTemplate,

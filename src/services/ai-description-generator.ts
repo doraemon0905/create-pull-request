@@ -34,7 +34,7 @@ export interface AIConfig {
   model?: string;
 }
 
-export class CopilotService {
+export class AIDescriptionGeneratorService {
   private clients: Map<AIProvider, AxiosInstance> = new Map();
   private selectedProvider: AIProvider | null = null;
 
@@ -298,17 +298,22 @@ export class CopilotService {
     summaryPrompt += `   - Jira ticket URL in format: [${jiraTicket.key}](JIRA_BASE_URL/browse/${jiraTicket.key})\n`;
     summaryPrompt += `   - Any Sentry error URLs mentioned in the ticket description\n`;
     summaryPrompt += `   - Other relevant tracking URLs\n`;
-    summaryPrompt += `2. Provides a detailed overview (4-6 sentences) explaining:\n`;
-    summaryPrompt += `   - What feature/change is being implemented\n`;
-    summaryPrompt += `   - How it addresses the JIRA ticket requirements\n`;
-    summaryPrompt += `   - The technical approach taken\n`;
-    summaryPrompt += `   - The impact on the system/users\n`;
-    summaryPrompt += `3. For EACH modified file, provides extensive detail including:\n`;
+    summaryPrompt += `2. Provides a detailed overview (6-8 sentences) explaining:\n`;
+    summaryPrompt += `   - What specific feature/change is being implemented\n`;
+    summaryPrompt += `   - How it directly addresses EACH requirement in the JIRA ticket description\n`;
+    summaryPrompt += `   - The technical approach and architecture decisions made\n`;
+    summaryPrompt += `   - The specific problem this solves from the ticket description\n`;
+    summaryPrompt += `   - The impact on the system, users, and related components\n`;
+    summaryPrompt += `   - How the implementation validates against the acceptance criteria\n`;
+    summaryPrompt += `3. For EACH modified file, provides EXTENSIVE detail including:\n`;
     summaryPrompt += `   - File header as clickable link: [src/filename.ext](GitHub_URL)\n`;
-    summaryPrompt += `   - Detailed explanation based on the actual diff content (3-4 sentences minimum)\n`;
-    summaryPrompt += `   - Specific functions/methods/classes that were modified (from diff analysis)\n`;
+    summaryPrompt += `   - COMPREHENSIVE explanation of what changed (5-7 sentences minimum)\n`;
+    summaryPrompt += `   - DETAILED analysis of how each change maps to specific JIRA ticket requirements\n`;
+    summaryPrompt += `   - ALL specific functions/methods/classes that were modified, added, or removed\n`;
+    summaryPrompt += `   - WHY each change was necessary to fulfill the exact JIRA requirements\n`;
+    summaryPrompt += `   - WHAT the code was doing before vs. what it does now (for modifications)\n`;
+    summaryPrompt += `   - HOW the new implementation solves the problems described in the ticket\n`;
     summaryPrompt += `   - Specific code patterns added/removed (from the provided diffs)\n`;
-    summaryPrompt += `   - Why each change was necessary for the JIRA requirements\n`;
     summaryPrompt += `   - MANDATORY: Multiple specific line links for ALL significant changes\n`;
     if (repoInfo) {
       summaryPrompt += `   - MUST include all GitHub file URLs provided above for navigation\n`;
@@ -318,23 +323,28 @@ export class CopilotService {
       summaryPrompt += `   - Include 4-6 specific line links per modified file covering ALL major changes\n`;
       summaryPrompt += `   - Group line links by functionality (e.g., "Authentication logic: [Line 45](url), [Line 67](url)")\n`;
     }
-    summaryPrompt += `4. Technical implementation details including:\n`;
-    summaryPrompt += `   - New functions/methods added and their purpose\n`;
-    summaryPrompt += `   - Modified existing functions and how they changed\n`;
-    summaryPrompt += `   - Integration points with other parts of the system\n`;
-    summaryPrompt += `   - Error handling and edge cases addressed\n`;
-    summaryPrompt += `5. Business value and impact:\n`;
-    summaryPrompt += `   - How this implementation fulfills the JIRA ticket requirements\n`;
-    summaryPrompt += `   - User experience improvements or changes\n`;
-    summaryPrompt += `   - System performance or security implications\n`;
-    summaryPrompt += `6. Review focus areas with specific line references:\n`;
-    summaryPrompt += `   - Critical changes that require careful review\n`;
-    summaryPrompt += `   - Complex logic with line-by-line explanations\n`;
-    summaryPrompt += `   - Integration points that could affect other features\n\n`;
-
+    summaryPrompt += `4. COMPREHENSIVE technical implementation details including:\n`;
+    summaryPrompt += `   - EVERY new function/method added, their exact purpose, and how they fulfill ticket requirements\n`;
+    summaryPrompt += `   - ALL modified existing functions with detailed before/after comparisons\n`;
+    summaryPrompt += `   - COMPLETE analysis of integration points with other system components\n`;
+    summaryPrompt += `   - DETAILED error handling, edge cases, and validation logic implemented\n`;
+    summaryPrompt += `   - SPECIFIC algorithm or business logic changes and their rationale\n`;
+    summaryPrompt += `   - EXACT data flow changes and how they address ticket requirements\n`;
+    summaryPrompt += `5. DETAILED business value and impact analysis:\n`;
+    summaryPrompt += `   - POINT-BY-POINT mapping of how this implementation fulfills EACH JIRA ticket requirement\n`;
+    summaryPrompt += `   - SPECIFIC user experience improvements with concrete examples\n`;
+    summaryPrompt += `   - MEASURABLE system performance, security, or reliability improvements\n`;
+    summaryPrompt += `   - CLEAR explanation of business problems solved and value delivered\n`;
+    summaryPrompt += `   - SPECIFIC scenarios where users will benefit from these changes\n`;
+    summaryPrompt += `6. DETAILED review focus areas with specific line references:\n`;
+    summaryPrompt += `   - ALL critical changes that require careful review with exact line numbers\n`;
+    summaryPrompt += `   - COMPLEX logic explained line-by-line with rationale for each decision\n`;
+    summaryPrompt += `   - ALL integration points that could affect other features with impact analysis\n`;
+    summaryPrompt += `   - POTENTIAL risks, side effects, or dependencies that reviewers should validate\n`;
+    summaryPrompt += `   - SPECIFIC test scenarios that validate the ticket requirements\n\n`;
     summaryPrompt += `Format the response as a COMPREHENSIVE structured summary with these sections:\n`;
     summaryPrompt += `- Ticket URLs (Jira, Sentry, etc.) at the very top\n`;
-    summaryPrompt += `- Detailed Overview (4-6 sentences explaining the change and impact)\n`;
+    summaryPrompt += `- Detailed Overview (6-8 sentences explaining the change and impact)\n`;
     summaryPrompt += `- File Changes (extensive file-by-file analysis with 4-6 line links each)\n`;
     summaryPrompt += `- Technical Implementation Details (methods, functions, integration points)\n`;
     summaryPrompt += `- Business Value and Impact (how it fulfills JIRA requirements)\n`;
@@ -425,13 +435,14 @@ export class CopilotService {
     prompt += `\n`;
 
     // Enhanced file changes summary with detailed analysis
-    prompt += `## Detailed Changes Analysis:\n`;
+    prompt += `## COMPREHENSIVE Changes Analysis:\n`;
     prompt += `- Total files changed: ${gitChanges.totalFiles}\n`;
     prompt += `- Total insertions: ${gitChanges.totalInsertions}\n`;
     prompt += `- Total deletions: ${gitChanges.totalDeletions}\n\n`;
 
-    // Detailed file-by-file analysis
-    prompt += `### File-by-File Changes:\n`;
+    // Detailed file-by-file analysis with enhanced requirements
+    prompt += `### DETAILED File-by-File Changes Analysis:\n`;
+    prompt += `For EACH file below, you MUST explain in detail HOW the specific changes fulfill the JIRA ticket requirements:\n\n`;
     gitChanges.files.forEach(file => {
       prompt += `\n**${file.file}** (${file.status}):\n`;
       prompt += `- Insertions: +${file.insertions}, Deletions: -${file.deletions}\n`;
@@ -449,7 +460,8 @@ export class CopilotService {
         const truncatedDiff = file.diffContent.length > LIMITS.MAX_DIFF_CONTENT_LENGTH
           ? file.diffContent.substring(0, LIMITS.MAX_DIFF_CONTENT_LENGTH) + '\n... (truncated for brevity)'
           : file.diffContent;
-        prompt += `- Code changes:\n\`\`\`diff\n${truncatedDiff}\n\`\`\`\n`;
+        prompt += `- COMPLETE code changes for analysis:\n\`\`\`diff\n${truncatedDiff}\n\`\`\`\n`;
+        prompt += `- MANDATORY: Analyze this diff and explain HOW each change addresses the JIRA ticket requirements\n`;
       }
     });
     prompt += `\n`;
@@ -504,11 +516,13 @@ export class CopilotService {
         prompt += `   - Based on this summary: "${summary}"\n`;
       }
       prompt += `4. Use the provided template structure for the body\n`;
-      prompt += `5. Fill template sections with COMPREHENSIVE details including:\n`;
-      prompt += `   - Detailed explanations of all code changes (3-4 sentences per file minimum)\n`;
-      prompt += `   - Specific functions/methods/classes modified\n`;
-      prompt += `   - Technical implementation approach and integration points\n`;
-      prompt += `   - Business value and impact on users/system\n`;
+      prompt += `5. Fill template sections with EXTREMELY DETAILED information including:\n`;
+      prompt += `   - COMPREHENSIVE explanations of all code changes (5-7 sentences per file minimum)\n`;
+      prompt += `   - EXACT mapping of how each code change fulfills specific JIRA ticket requirements\n`;
+      prompt += `   - ALL specific functions/methods/classes modified with before/after analysis\n`;
+      prompt += `   - DETAILED technical implementation approach and integration points\n`;
+      prompt += `   - SPECIFIC business value and measurable impact on users/system\n`;
+      prompt += `   - CLEAR connection between implementation and JIRA ticket acceptance criteria\n`;
       prompt += `6. MANDATORY: Include extensive line links for code changes:\n`;
       prompt += `   - 4-6 specific line links per modified file\n`;
       prompt += `   - Group line links by functionality or change type\n`;
@@ -524,12 +538,14 @@ export class CopilotService {
         prompt += `   - Based on this summary: "${summary}"\n`;
       }
       prompt += `   - Examples: "${jiraTicket.key}: Add user authentication", "${jiraTicket.key}: Fix login bug"\n`;
-      prompt += `2. Provides a detailed description that:\n`;
-      prompt += `   - Starts with the summary as an overview\n`;
-      prompt += `   - Explains HOW the code changes fulfill the JIRA ticket requirements\n`;
-      prompt += `   - References specific files and line numbers where significant changes occurred\n`;
-      prompt += `   - Describes the relevance of each major file change to the overall solution\n`;
-      prompt += `   - Connects the implementation to the JIRA ticket description and requirements\n`;
+      prompt += `2. Provides an EXTREMELY DETAILED description that:\n`;
+      prompt += `   - Starts with the comprehensive summary as an overview\n`;
+      prompt += `   - EXPLICITLY explains HOW EACH code change fulfills SPECIFIC JIRA ticket requirements\n`;
+      prompt += `   - METICULOUSLY references specific files and line numbers for ALL significant changes\n`;
+      prompt += `   - THOROUGHLY describes the relevance of EVERY file change to the overall solution\n`;
+      prompt += `   - CLEARLY connects EACH implementation detail to the JIRA ticket description and requirements\n`;
+      prompt += `   - ANALYZES the before/after state for all modified code and WHY changes were necessary\n`;
+      prompt += `   - DEMONSTRATES how the implementation validates against acceptance criteria\n`;
       prompt += `3. Includes the Jira ticket reference with proper linking\n`;
       prompt += `4. Summarizes the technical approach and key implementation details\n`;
       prompt += `5. References specific line numbers and files for reviewers to focus on\n`;
@@ -561,9 +577,12 @@ export class CopilotService {
     prompt += `- In the summary section, include direct GitHub file URLs for all changed files\n`;
     prompt += `- CRITICAL: Include comprehensive line links [Line X](file_url#LX) for ALL significant code changes\n`;
     prompt += `- Each modified file must have 4-6 clickable line links covering ALL major changes\n`;
-    prompt += `- Provide detailed explanations (3-4 sentences minimum) for each file modification\n`;
-    prompt += `- Include specific function/method names and their purposes\n`;
-    prompt += `- Explain the technical approach and integration points\n\n`;
+    prompt += `- Provide EXTREMELY detailed explanations (5-7 sentences minimum) for each file modification\n`;
+    prompt += `- Include ALL specific function/method names and their exact purposes\n`;
+    prompt += `- Explain the complete technical approach, architecture decisions, and integration points\n`;
+    prompt += `- MANDATORY: Map EVERY code change to its corresponding JIRA ticket requirement\n`;
+    prompt += `- REQUIRED: Explain WHY each change was implemented and HOW it solves the ticket problem\n`;
+    prompt += `- ESSENTIAL: Include before/after analysis for all modified code sections\n\n`;
 
     prompt += `CRITICAL TITLE REQUIREMENTS: \n`;
     prompt += `- Title MUST start with "${jiraTicket.key}: "\n`;
