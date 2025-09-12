@@ -1,0 +1,175 @@
+name: 🏷️ Auto Version Update
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+      - master
+
+jobs:
+  auto-version:
+    # Only run when PR is merged or direct push to main
+    if: (github.event_name == 'push') || (github.event.pull_request.merged == true)
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write  # Needed to push version tags and commits
+      pull-requests: read  # Needed to read PR information
+    
+    steps:
+      - name: 🔍 Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Fetch full history for proper git operations
+          fetch-depth: 0
+          # Use GitHub token with write permissions
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: 📦 Install dependencies
+        run: npm ci
+      
+      - name: 🔍 Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - name: 📋 Get PR Information
+        id: pr-info
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "pr_number=${{ github.event.number }}" >> $GITHUB_OUTPUT
+          echo "pr_title=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
+          echo "pr_labels=$(echo '${{ toJson(github.event.pull_request.labels.*.name) }}' | jq -r 'join(" ")')" >> $GITHUB_OUTPUT
+          echo "pr_merged=${{ github.event.pull_request.merged }}" >> $GITHUB_OUTPUT
+      
+      - name: 🏷️ Run auto version update
+        id: version-update
+        run: |
+          echo "🏷️ Running auto version update script..."
+          
+          # Set environment variables for the script
+          export GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          export CI=true
+          export GITHUB_ACTIONS=true
+          export GITHUB_ACTOR="${{ github.actor }}"
+          
+          # Run the auto version script
+          if ./scripts/auto-version.sh; then
+            echo "version_updated=true" >> $GITHUB_OUTPUT
+            echo "✅ Version update completed successfully"
+          else
+            echo "version_updated=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No version update needed"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: 📤 Push version changes
+        if: steps.version-update.outputs.version_updated == 'true'
+        run: |
+          echo "📤 Pushing version changes and tags..."
+          
+          # Push the version commit
+          git push origin HEAD:${{ github.ref_name }}
+          
+          # Push the new tag
+          if [ -n "$NEW_VERSION" ]; then
+            git push origin "v$NEW_VERSION"
+            echo "✅ Pushed version commit and tag v$NEW_VERSION"
+          else
+            echo "⚠️ No new version to push"
+          fi
+      
+      - name: 🏷️ Create GitHub Release
+        if: steps.version-update.outputs.version_updated == 'true' && env.NEW_VERSION != ''
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ env.NEW_VERSION }}
+          release_name: Release v${{ env.NEW_VERSION }}
+          body: |
+            ## 🚀 Auto Release v${{ env.NEW_VERSION }}
+            
+            This release was automatically created when PR was merged to main.
+            
+            ### Changes
+            - **Version bump type**: ${{ env.VERSION_TYPE }}
+            - **Previous version**: ${{ env.OLD_VERSION }}
+            - **New version**: ${{ env.NEW_VERSION }}
+            
+            ### What's Changed
+            ${{ github.event_name == 'pull_request' && format('- Merged PR #{0}: {1}', github.event.number, github.event.pull_request.title) || 'See commit history for detailed changes' }}
+            
+            ### Installation
+            ```bash
+            npm install -g publish-pull-request@${{ env.NEW_VERSION }}
+            ```
+            
+            ### Usage
+            ```bash
+            create-pr create --jira YOUR-123
+            ```
+            
+            For full documentation, see [README.md](https://github.com/${{ github.repository }}/blob/main/README.md)
+          draft: false
+          prerelease: ${{ contains(env.NEW_VERSION, '-') }}
+      
+      - name: 📊 Version Update Summary
+        if: always()
+        run: |
+          echo "📊 Version Update Summary"
+          echo "========================"
+          echo "Event: ${{ github.event_name }}"
+          echo "Branch: ${{ github.ref_name }}"
+          
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "PR Number: ${{ github.event.number }}"
+            echo "PR Title: ${{ github.event.pull_request.title }}"
+            echo "PR Merged: ${{ github.event.pull_request.merged }}"
+          fi
+          
+          echo "Version Updated: ${{ steps.version-update.outputs.version_updated }}"
+          
+          if [ -n "$OLD_VERSION" ] && [ -n "$NEW_VERSION" ]; then
+            echo "Old Version: $OLD_VERSION"
+            echo "New Version: $NEW_VERSION"
+            echo "Bump Type: $VERSION_TYPE"
+            echo "Git Tag: v$NEW_VERSION"
+            echo ""
+            echo "✅ Version successfully updated!"
+          else
+            echo ""
+            echo "ℹ️ No version update was performed"
+          fi
+
+  # Optional: Trigger publish workflow after version update
+  trigger-publish:
+    needs: auto-version
+    runs-on: ubuntu-latest
+    if: needs.auto-version.outputs.version_updated == 'true'
+    
+    steps:
+      - name: 🚀 Trigger Publish Workflow
+        run: |
+          echo "🚀 Version was updated, consider triggering publish workflow"
+          echo "💡 You can manually trigger the publish workflow from the Actions tab"
+          echo "📦 Or set up automatic publishing by uncommenting the workflow_dispatch below"
+          
+          # Uncomment the following lines to automatically trigger publish after version update
+          # curl -X POST \
+          #   -H "Accept: application/vnd.github.v3+json" \
+          #   -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          #   https://api.github.com/repos/${{ github.repository }}/actions/workflows/publish.yml/dispatches \
+          #   -d '{"ref":"main","inputs":{"version_type":"patch","dry_run":"false"}}'

@@ -18,6 +18,8 @@
     "version:minor": "./scripts/version.sh minor",
     "version:major": "./scripts/version.sh major",
     "version:prerelease": "./scripts/version.sh prerelease",
+    "version:auto": "./scripts/auto-version.sh",
+    "version:auto:dry": "./scripts/auto-version.sh --dry-run",
     "publish:full": "./scripts/publish.sh",
     "publish:dry": "npm publish --dry-run",
     "validate": "./scripts/pre-publish.sh",
