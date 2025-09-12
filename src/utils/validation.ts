@@ -1,4 +1,5 @@
 import { validateConfig, getConfigValue as getConfigValueFromConfig } from './config';
+import { REGEX_PATTERNS } from '../constants';
 
 export function validateEnvironment(): void {
   if (!validateConfig()) {
@@ -39,8 +40,18 @@ export function getConfigValue(key: string): string | undefined {
 
 export function validateJiraTicket(ticket: string): boolean {
   // Basic Jira ticket format validation (PROJECT-123)
-  const jiraTicketRegex = /^[A-Z][A-Z0-9]*-\d+$/;
-  return jiraTicketRegex.test(ticket);
+  return REGEX_PATTERNS.JIRA_TICKET.test(ticket);
+}
+
+export function extractJiraTicketFromBranch(branchName: string): string | null {
+  // Extract Jira ticket ID from branch names like:
+  // - ft/ET-123 -> ET-123
+  // - ft-ET-123 -> ET-123
+  // - feature_ET-123 -> ET-123
+  // - ET-123-some-description -> ET-123
+  // - bugfix/PROJ-456/fix-issue -> PROJ-456
+  const match = branchName.match(REGEX_PATTERNS.JIRA_TICKET_FROM_BRANCH);
+  return match ? match[1].toUpperCase() : null;
 }
 
 export function validateGitRepository(): void {

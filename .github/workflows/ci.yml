@@ -28,6 +28,17 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
       
+      - name: 📦 Cache build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            lib
+            *.tsbuildinfo
+          key: build-${{ runner.os }}-node${{ matrix.node-version }}-${{ hashFiles('src/**/*', 'tsconfig.json') }}
+          restore-keys: |
+            build-${{ runner.os }}-node${{ matrix.node-version }}-
+            build-${{ runner.os }}-
+      
       - name: 📦 Install dependencies
         run: npm ci
       
@@ -191,6 +202,17 @@ jobs:
           node-version: '20'
           cache: 'npm'
       
+      - name: 📦 Cache security tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            /tmp/license-checker-*
+            audit-report.json
+          key: security-tools-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            security-tools-${{ runner.os }}-
+      
       - name: 📦 Install dependencies
         run: npm ci
       
@@ -237,6 +259,17 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+      
+      - name: 📦 Cache analysis results
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            .eslintcache
+            coverage
+          key: code-quality-${{ runner.os }}-${{ hashFiles('src/**/*', '.eslintrc.*', 'tsconfig.json') }}
+          restore-keys: |
+            code-quality-${{ runner.os }}-
       
       - name: 📦 Install dependencies
         run: npm ci
@@ -293,6 +326,18 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
+      
+      - name: 📦 Cache compatibility build
+        uses: actions/cache@v4
+        with:
+          path: |
+            lib
+            *.tsbuildinfo
+            ~/.npm
+          key: compat-build-${{ runner.os }}-${{ matrix.node-version }}-${{ hashFiles('src/**/*', 'tsconfig.json', 'package-lock.json') }}
+          restore-keys: |
+            compat-build-${{ runner.os }}-${{ matrix.node-version }}-
+            compat-build-${{ runner.os }}-
       
       - name: 📦 Install dependencies
         run: npm ci

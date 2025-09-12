@@ -5,6 +5,7 @@ import { GitChanges, FileChange } from './git';
 import { PullRequestTemplate } from './github';
 import { getConfig } from '../utils/config';
 import * as inquirer from 'inquirer';
+import { API_URLS, LIMITS, HEADERS, DEFAULT_MODELS } from '../constants';
 
 export interface GenerateDescriptionOptions {
   jiraTicket: JiraTicket;
@@ -44,7 +45,7 @@ export class CopilotService {
   private initializeClients() {
     const githubConfig = getConfig('github');
     const copilotConfig = getConfig('copilot');
-    
+
     // Try to get AI providers config
     let aiProvidersConfig;
     try {
@@ -53,46 +54,46 @@ export class CopilotService {
       // Fallback to environment variables if config doesn't exist
       aiProvidersConfig = null;
     }
-    
+
     // ChatGPT client
-    const chatGptKey = aiProvidersConfig?.openai?.apiKey || 
-                      process.env.OPENAI_API_KEY || 
-                      process.env.CHATGPT_API_KEY;
+    const chatGptKey = aiProvidersConfig?.openai?.apiKey ||
+      process.env.OPENAI_API_KEY ||
+      process.env.CHATGPT_API_KEY;
     if (chatGptKey) {
       this.clients.set('chatgpt', axios.create({
-        baseURL: 'https://api.openai.com/v1',
+        baseURL: API_URLS.OPENAI_BASE_URL,
         headers: {
           'Authorization': `Bearer ${chatGptKey}`,
-          'Content-Type': 'application/json'
+          'Content-Type': HEADERS.JSON_CONTENT_TYPE
         },
-        timeout: 30000
+        timeout: LIMITS.API_TIMEOUT_MS
       }));
     }
 
     // Gemini client
-    const geminiKey = aiProvidersConfig?.gemini?.apiKey || 
-                     process.env.GEMINI_API_KEY || 
-                     process.env.GOOGLE_API_KEY;
+    const geminiKey = aiProvidersConfig?.gemini?.apiKey ||
+      process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_API_KEY;
     if (geminiKey) {
       this.clients.set('gemini', axios.create({
-        baseURL: 'https://generativelanguage.googleapis.com/v1beta',
-        timeout: 30000
+        baseURL: API_URLS.GEMINI_BASE_URL,
+        timeout: LIMITS.API_TIMEOUT_MS
       }));
     }
 
     // Copilot client (fallback)
     const copilotToken = aiProvidersConfig?.copilot?.apiToken ||
-                        copilotConfig.apiToken ||
-                        githubConfig.token;
+      copilotConfig.apiToken ||
+      githubConfig.token;
     if (copilotToken) {
       this.clients.set('copilot', axios.create({
-        baseURL: 'https://api.githubcopilot.com',
+        baseURL: API_URLS.COPILOT_BASE_URL,
         headers: {
           'Authorization': `Bearer ${copilotToken}`,
-          'Content-Type': 'application/json',
-          'User-Agent': 'create-pr-cli'
+          'Content-Type': HEADERS.JSON_CONTENT_TYPE,
+          'User-Agent': HEADERS.USER_AGENT
         },
-        timeout: 30000
+        timeout: LIMITS.API_TIMEOUT_MS
       }));
     }
   }
@@ -106,12 +107,12 @@ export class CopilotService {
 
       // First, generate a summary using selected AI provider
       const summary = await this.generateSummary(options);
-      
+
       // Then generate the full PR description using the summary
       const prompt = this.buildPrompt(options, summary);
       const response = await this.callAIAPI(prompt, this.selectedProvider);
       const result = this.parseAIResponse(response, this.selectedProvider);
-      
+
       return {
         ...result,
         summary
@@ -125,7 +126,7 @@ export class CopilotService {
 
   private async selectAIProvider(): Promise<AIProvider> {
     const availableProviders = Array.from(this.clients.keys());
-    
+
     if (availableProviders.length === 0) {
       throw new Error('No AI providers configured. Please set OPENAI_API_KEY, GEMINI_API_KEY, or configure GitHub Copilot.');
     }
@@ -167,10 +168,10 @@ export class CopilotService {
   private async tryFallbackProviders(options: GenerateDescriptionOptions): Promise<GeneratedPRContent> {
     const providers: AIProvider[] = ['chatgpt', 'gemini', 'copilot'];
     const availableProviders = providers.filter(p => this.clients.has(p));
-    
+
     // Remove the already tried provider
     const remainingProviders = availableProviders.filter(p => p !== this.selectedProvider);
-    
+
     for (const provider of remainingProviders) {
       try {
         console.log(`Trying fallback provider: ${provider.toUpperCase()}`);
@@ -178,7 +179,7 @@ export class CopilotService {
         const prompt = this.buildPrompt(options, summary);
         const response = await this.callAIAPI(prompt, provider);
         const result = this.parseAIResponse(response, provider);
-        
+
         console.log(`Successfully used fallback provider: ${provider.toUpperCase()}`);
         this.selectedProvider = provider;
         return { ...result, summary };
@@ -204,14 +205,14 @@ export class CopilotService {
     summaryPrompt += `- Summary: ${jiraTicket.summary}\n`;
     summaryPrompt += `- Type: ${jiraTicket.issueType}\n`;
     if (jiraTicket.description) {
-      summaryPrompt += `- Description: ${jiraTicket.description.substring(0, 500)}${jiraTicket.description.length > 500 ? '...' : ''}\n`;
+      summaryPrompt += `- Description: ${jiraTicket.description.substring(0, LIMITS.MAX_DESCRIPTION_PREVIEW_LENGTH)}${jiraTicket.description.length > LIMITS.MAX_DESCRIPTION_PREVIEW_LENGTH ? '...' : ''}\n`;
     }
 
     // PR Template context if available
     if (template) {
       summaryPrompt += `\n## PR Template Context:\n`;
       summaryPrompt += `This PR should follow this template structure:\n`;
-      summaryPrompt += `${template.content.substring(0, 800)}${template.content.length > 800 ? '...' : ''}\n`;
+      summaryPrompt += `${template.content}\n`;
       summaryPrompt += `Please ensure the summary aligns with the template's intended structure and sections.\n`;
     }
 
@@ -226,12 +227,12 @@ export class CopilotService {
     gitChanges.files.forEach(file => {
       summaryPrompt += `\n**${file.file}** (${file.status}):\n`;
       summaryPrompt += `- Changes: +${file.insertions} insertions, -${file.deletions} deletions\n`;
-      
+
       // Add GitHub file URL if repository info is available
       if (repoInfo) {
         const fileUrl = `https://github.com/${repoInfo.owner}/${repoInfo.repo}/blob/${repoInfo.currentBranch}/${file.file}`;
         summaryPrompt += `- GitHub URL: ${fileUrl}\n`;
-        
+
         // Add specific line URLs for key changes
         if (file.lineNumbers?.added.length && file.lineNumbers.added.length > 0) {
           const keyLines = file.lineNumbers.added.slice(0, 3);
@@ -242,7 +243,7 @@ export class CopilotService {
           }
         }
       }
-      
+
       if (file.lineNumbers) {
         if (file.lineNumbers.added.length > 0) {
           summaryPrompt += `- Lines added: ${file.lineNumbers.added.slice(0, 10).join(', ')}${file.lineNumbers.added.length > 10 ? '...' : ''}\n`;
@@ -251,18 +252,47 @@ export class CopilotService {
           summaryPrompt += `- Lines removed: ${file.lineNumbers.removed.slice(0, 10).join(', ')}${file.lineNumbers.removed.length > 10 ? '...' : ''}\n`;
         }
       }
-      
+
       if (file.diffContent) {
-        summaryPrompt += `- Code preview:\n\`\`\`diff\n${file.diffContent}\n\`\`\`\n`;
+        // Truncate very long diffs but ensure we capture the most important parts
+        const truncatedDiff = file.diffContent.length > LIMITS.MAX_DIFF_CONTENT_LENGTH * 2
+          ? file.diffContent.substring(0, LIMITS.MAX_DIFF_CONTENT_LENGTH * 2) + '\n... (diff truncated for brevity)'
+          : file.diffContent;
+        summaryPrompt += `- Full code diff:\n\`\`\`diff\n${truncatedDiff}\n\`\`\`\n`;
+        
+        // Extract key changes from the diff for better AI understanding
+        const diffSummary = this.extractDiffSummary(file.diffContent);
+        if (diffSummary.length > 0) {
+          summaryPrompt += `- Key code changes:\n${diffSummary.map(change => `  * ${change}`).join('\n')}\n`;
+        }
+      } else {
+        summaryPrompt += `- No detailed diff available for this file\n`;
       }
     });
-    
+
     if (diffContent) {
       summaryPrompt += `\n## Overall Code Changes:\n`;
-      summaryPrompt += `\`\`\`diff\n${diffContent}\n\`\`\`\n`;
+      
+      // Provide the full diff with length limits
+      const truncatedOverallDiff = diffContent.length > LIMITS.MAX_OVERALL_DIFF_LENGTH
+        ? diffContent.substring(0, LIMITS.MAX_OVERALL_DIFF_LENGTH) + '\n... (overall diff truncated for brevity)'
+        : diffContent;
+      summaryPrompt += `\`\`\`diff\n${truncatedOverallDiff}\n\`\`\`\n`;
+      
+      // Extract and provide high-level diff insights
+      const overallDiffSummary = this.extractDiffSummary(diffContent);
+      if (overallDiffSummary.length > 0) {
+        summaryPrompt += `\n### High-level code change patterns:\n`;
+        summaryPrompt += `${overallDiffSummary.map(change => `- ${change}`).join('\n')}\n`;
+      }
+    } else {
+      summaryPrompt += `\n## Overall Code Changes:\n`;
+      summaryPrompt += `Overall diff content not available. Analysis based on file-level changes above.\n`;
     }
 
     summaryPrompt += `\n## Summary Requirements:\n`;
+    summaryPrompt += `IMPORTANT: Analyze the provided diff content carefully to understand the actual code changes made.\n`;
+    summaryPrompt += `Use the diff content to provide specific, accurate descriptions of what was modified, added, or removed.\n\n`;
     summaryPrompt += `Please provide a HIGHLY DETAILED and comprehensive summary that:\n`;
     summaryPrompt += `1. ALWAYS starts with relevant ticket URLs at the very top if available:\n`;
     summaryPrompt += `   - Jira ticket URL in format: [${jiraTicket.key}](JIRA_BASE_URL/browse/${jiraTicket.key})\n`;
@@ -283,6 +313,7 @@ export class CopilotService {
     summaryPrompt += `   - WHY each change was necessary to fulfill the exact JIRA requirements\n`;
     summaryPrompt += `   - WHAT the code was doing before vs. what it does now (for modifications)\n`;
     summaryPrompt += `   - HOW the new implementation solves the problems described in the ticket\n`;
+    summaryPrompt += `   - Specific code patterns added/removed (from the provided diffs)\n`;
     summaryPrompt += `   - MANDATORY: Multiple specific line links for ALL significant changes\n`;
     if (repoInfo) {
       summaryPrompt += `   - MUST include all GitHub file URLs provided above for navigation\n`;
@@ -311,7 +342,6 @@ export class CopilotService {
     summaryPrompt += `   - ALL integration points that could affect other features with impact analysis\n`;
     summaryPrompt += `   - POTENTIAL risks, side effects, or dependencies that reviewers should validate\n`;
     summaryPrompt += `   - SPECIFIC test scenarios that validate the ticket requirements\n\n`;
-    
     summaryPrompt += `Format the response as a COMPREHENSIVE structured summary with these sections:\n`;
     summaryPrompt += `- Ticket URLs (Jira, Sentry, etc.) at the very top\n`;
     summaryPrompt += `- Detailed Overview (6-8 sentences explaining the change and impact)\n`;
@@ -326,7 +356,7 @@ export class CopilotService {
     summaryPrompt += `IMPORTANT: Return the response as JSON with a single "summary" field containing the structured summary content. Use markdown formatting within the summary text.\n`;
     summaryPrompt += `Example format: {"summary": "## Overview\\n[content here]\\n\\n## File Changes\\n[content here]"}\n`;
     summaryPrompt += `CRITICAL: Return ONLY the raw JSON object. Do NOT wrap it in markdown code blocks (\`\`\`json). Do NOT include any text before or after the JSON.\n`;
-    
+
     if (template) {
       summaryPrompt += `\nCRITICAL TEMPLATE ADHERENCE:\n`;
       summaryPrompt += `- You MUST strictly follow the provided PR template structure and format\n`;
@@ -341,25 +371,25 @@ export class CopilotService {
       console.log(chalk.gray('\n🔍 Debug - Summary Generation:'));
       console.log(chalk.gray(`Provider: ${targetProvider}`));
       console.log(chalk.gray(`Prompt length: ${summaryPrompt.length} characters`));
-      
+
       const response = await this.callAIAPI(summaryPrompt, targetProvider);
       let content = this.extractContentFromResponse(response, targetProvider);
-      
+
       console.log(chalk.gray(`Raw summary response: "${content}"`));
       console.log(chalk.gray(`Summary response length: ${content?.length || 0}`));
       console.log(chalk.gray(`Is summary valid JSON: ${this.isValidJSON(content)}`));
-      
+
       // Clean the content to remove markdown code blocks
       const cleanedContent = this.cleanJSONResponse(content);
       console.log(chalk.gray(`Cleaned summary content: "${cleanedContent}"`));
       console.log(chalk.gray(`Is cleaned summary valid JSON: ${this.isValidJSON(cleanedContent)}`));
-      
+
       // Try to parse as JSON first, if it's valid JSON extract the content
       try {
         const parsed = JSON.parse(cleanedContent);
         console.log(chalk.gray(`Summary JSON parsed successfully`));
         console.log(chalk.gray(`Summary JSON keys: ${Object.keys(parsed).join(', ')}`));
-        
+
         if (parsed.summary) {
           content = parsed.summary;
           console.log(chalk.gray(`Using parsed.summary: "${content}"`));
@@ -374,10 +404,10 @@ export class CopilotService {
         console.log(chalk.gray(`Summary is not JSON, using cleaned content as plain text`));
         content = cleanedContent;
       }
-      
+
       const finalSummary = content.trim().replace(/["']/g, ''); // Remove quotes
       console.log(chalk.gray(`Final summary: "${finalSummary}"`));
-      
+
       return finalSummary;
     } catch (error) {
       console.log(chalk.gray(`❌ Summary generation failed: ${error}`));
@@ -416,7 +446,7 @@ export class CopilotService {
     gitChanges.files.forEach(file => {
       prompt += `\n**${file.file}** (${file.status}):\n`;
       prompt += `- Insertions: +${file.insertions}, Deletions: -${file.deletions}\n`;
-      
+
       if (file.lineNumbers) {
         if (file.lineNumbers.added.length > 0) {
           prompt += `- Added lines: ${file.lineNumbers.added.slice(0, 10).join(', ')}${file.lineNumbers.added.length > 10 ? '...' : ''}\n`;
@@ -425,10 +455,15 @@ export class CopilotService {
           prompt += `- Removed lines: ${file.lineNumbers.removed.slice(0, 10).join(', ')}${file.lineNumbers.removed.length > 10 ? '...' : ''}\n`;
         }
       }
-      
+
       if (file.diffContent) {
+<<<<<<< HEAD
         const truncatedDiff = file.diffContent.length > 1500 
           ? file.diffContent.substring(0, 1500) + '\n... (truncated for brevity)'
+=======
+        const truncatedDiff = file.diffContent.length > LIMITS.MAX_DIFF_CONTENT_LENGTH
+          ? file.diffContent.substring(0, LIMITS.MAX_DIFF_CONTENT_LENGTH) + '\n... (truncated for brevity)'
+>>>>>>> main
           : file.diffContent;
         prompt += `- COMPLETE code changes for analysis:\n\`\`\`diff\n${truncatedDiff}\n\`\`\`\n`;
         prompt += `- MANDATORY: Analyze this diff and explain HOW each change addresses the JIRA ticket requirements\n`;
@@ -465,7 +500,7 @@ export class CopilotService {
     // Overall diff content for context
     if (diffContent) {
       prompt += `## Overall Code Changes Context:\n`;
-      prompt += `\`\`\`diff\n${diffContent.substring(0, 3000)}${diffContent.length > 3000 ? '\n... (diff truncated for brevity)' : ''}\n\`\`\`\n\n`;
+      prompt += `\`\`\`diff\n${diffContent.substring(0, LIMITS.MAX_OVERALL_DIFF_LENGTH)}${diffContent.length > LIMITS.MAX_OVERALL_DIFF_LENGTH ? '\n... (diff truncated for brevity)' : ''}\n\`\`\`\n\n`;
     }
 
     // Add summary context if available
@@ -599,11 +634,11 @@ export class CopilotService {
     } catch {
       aiProvidersConfig = null;
     }
-    const model = aiProvidersConfig?.openai?.model || process.env.OPENAI_MODEL || 'gpt-4o';
-    
+    const model = aiProvidersConfig?.openai?.model || process.env.OPENAI_MODEL || DEFAULT_MODELS.OPENAI;
+
     const response = await client.post('/chat/completions', {
       model: model,
-      max_tokens: 4000,
+      max_tokens: LIMITS.MAX_API_TOKENS,
       messages: [
         {
           role: 'user',
@@ -611,11 +646,11 @@ export class CopilotService {
         }
       ]
     });
-    
+
     if (!response.data.choices[0]?.message?.content) {
       throw new Error('No content received from ChatGPT API');
     }
-    
+
     return response.data;
   }
 
@@ -626,9 +661,9 @@ export class CopilotService {
     } catch {
       aiProvidersConfig = null;
     }
-    const model = aiProvidersConfig?.gemini?.model || process.env.GEMINI_MODEL || 'gemini-1.5-pro';
+    const model = aiProvidersConfig?.gemini?.model || process.env.GEMINI_MODEL || DEFAULT_MODELS.GEMINI;
     const apiKey = aiProvidersConfig?.gemini?.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-    
+
     const response = await client.post(`/models/${model}:generateContent?key=${apiKey}`, {
       contents: [{
         parts: [{
@@ -636,14 +671,14 @@ export class CopilotService {
         }]
       }],
       generationConfig: {
-        maxOutputTokens: 4000
+        maxOutputTokens: LIMITS.MAX_API_TOKENS
       }
     });
-    
+
     if (!response.data.candidates?.[0]?.content?.parts?.[0]?.text) {
       throw new Error('No content received from Gemini API');
     }
-    
+
     return response.data;
   }
 
@@ -654,11 +689,11 @@ export class CopilotService {
     } catch {
       aiProvidersConfig = null;
     }
-    const model = aiProvidersConfig?.copilot?.model || process.env.COPILOT_MODEL || 'gpt-4o';
-    
+    const model = aiProvidersConfig?.copilot?.model || process.env.COPILOT_MODEL || DEFAULT_MODELS.COPILOT;
+
     const response = await client.post('/chat/completions', {
       model: model,
-      max_tokens: 4000,
+      max_tokens: LIMITS.MAX_API_TOKENS,
       messages: [
         {
           role: 'user',
@@ -666,27 +701,27 @@ export class CopilotService {
         }
       ]
     });
-    
+
     if (!response.data.choices[0]?.message?.content) {
       throw new Error('No content received from Copilot API');
     }
-    
+
     return response.data;
   }
 
   private parseAIResponse(response: any, provider: AIProvider): GeneratedPRContent {
     const content = this.extractContentFromResponse(response, provider);
-    
+
     // Debug: Log the raw response
     console.log(chalk.gray('\n🔍 Debug - Raw AI Response:'));
     console.log(chalk.gray(`Provider: ${provider}`));
     console.log(chalk.gray(`Full response structure:`));
-    console.log(chalk.gray(JSON.stringify(response, null, 2).substring(0, 500) + '...'));
+    console.log(chalk.gray(JSON.stringify(response, null, 2).substring(0, LIMITS.MAX_DESCRIPTION_PREVIEW_LENGTH) + '...'));
     console.log(chalk.gray(`Extracted content:`));
     console.log(chalk.gray(`"${content}"`));
     console.log(chalk.gray(`Content length: ${content?.length || 0}`));
     console.log(chalk.gray(`Is valid JSON: ${this.isValidJSON(content)}`));
-    
+
     return this.parseResponseContent(content);
   }
 
@@ -701,20 +736,20 @@ export class CopilotService {
 
   private cleanJSONResponse(content: string): string {
     if (!content) return content;
-    
+
     // Remove markdown code blocks (```json ... ``` or ``` ... ```)
     let cleaned = content
       .replace(/^```(?:json)?\s*\n?/gmi, '') // Remove opening ```json or ```
       .replace(/\n?```\s*$/gm, '') // Remove closing ```
       .trim();
-    
+
     // Also handle case where there might be text before/after the JSON
     // Try to extract JSON from within the response
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       cleaned = jsonMatch[0];
     }
-    
+
     return cleaned.trim();
   }
 
@@ -733,52 +768,52 @@ export class CopilotService {
   private parseResponseContent(content: string): GeneratedPRContent {
     console.log(chalk.gray('\n🔍 Debug - Parsing Response Content:'));
     console.log(chalk.gray(`Raw content to parse: "${content}"`));
-    
+
     // Clean the content to remove markdown code blocks
     const cleanedContent = this.cleanJSONResponse(content);
     console.log(chalk.gray(`Cleaned content: "${cleanedContent}"`));
     console.log(chalk.gray(`Is cleaned content valid JSON: ${this.isValidJSON(cleanedContent)}`));
-    
+
     try {
       const parsed = JSON.parse(cleanedContent);
       console.log(chalk.gray('✅ JSON parsing successful'));
       console.log(chalk.gray(`Parsed object keys: ${Object.keys(parsed).join(', ')}`));
       console.log(chalk.gray(`Parsed title: "${parsed.title}"`));
       console.log(chalk.gray(`Parsed body length: ${parsed.body?.length || 0}`));
-      
+
       // Use AI-generated content directly, only use empty string if truly missing
       // This way we can distinguish between AI-generated content and missing content
       const title = parsed.title || '';
       const body = parsed.body || '';
-      
+
       const result = {
         title: title.trim(),
         body: body.trim()
       };
-      
+
       console.log(chalk.gray(`Final parsed result:`));
       console.log(chalk.gray(`- Title: "${result.title}"`));
       console.log(chalk.gray(`- Body length: ${result.body.length}`));
-      
+
       return result;
     } catch (error) {
       console.log(chalk.gray('❌ JSON parsing failed'));
       console.log(chalk.gray(`Parse error: ${error}`));
       console.log(chalk.gray('Attempting manual extraction...'));
-      
+
       // If parsing fails, extract content manually from the cleaned content first, then original
       const extractedTitle = this.extractTitle(cleanedContent) || this.extractTitle(content);
       console.log(chalk.gray(`Extracted title: "${extractedTitle}"`));
-      
+
       const result = {
         title: extractedTitle?.trim() || '',
         body: cleanedContent?.trim() || content?.trim() || ''
       };
-      
+
       console.log(chalk.gray(`Manual extraction result:`));
       console.log(chalk.gray(`- Title: "${result.title}"`));
       console.log(chalk.gray(`- Body length: ${result.body.length}`));
-      
+
       return result;
     }
   }
@@ -801,10 +836,10 @@ export class CopilotService {
 
     // Generate body based on template or default structure
     let body = '';
-    
+
     // Always start with ticket URLs at the top
     body += `[${jiraTicket.key}](${jiraConfig.baseUrl}/browse/${jiraTicket.key})\n\n`;
-    
+
     // Add summary
     body += `## Summary\n\n${summary}\n\n`;
 
@@ -817,7 +852,7 @@ export class CopilotService {
     } else {
       // Enhanced default template with detailed analysis
       body += `**Ticket Summary:** ${jiraTicket.summary}\n\n`;
-      
+
       if (jiraTicket.description) {
         body += `**JIRA Description:** ${jiraTicket.description}\n\n`;
         body += `### How this PR addresses the JIRA requirements:\n`;
@@ -833,7 +868,7 @@ export class CopilotService {
       gitChanges.files.forEach(file => {
         body += `#### \`${file.file}\` (${file.status})\n`;
         body += `- **Changes:** +${file.insertions} insertions, -${file.deletions} deletions\n`;
-        
+
         if (file.lineNumbers) {
           if (file.lineNumbers.added.length > 0) {
             const addedLines = file.lineNumbers.added.slice(0, 10);
@@ -844,7 +879,7 @@ export class CopilotService {
             body += `- **Removed lines:** ${removedLines.join(', ')}${file.lineNumbers.removed.length > 10 ? ` (and ${file.lineNumbers.removed.length - 10} more)` : ''}\n`;
           }
         }
-        
+
         body += `- **Relevance:** Key implementation file for ${this.getFileRelevanceDescription(file, jiraTicket)}\n\n`;
       });
 
@@ -858,7 +893,7 @@ export class CopilotService {
 
       body += `## Key Implementation Areas\n\n`;
       body += `Reviewers should focus on the following areas:\n\n`;
-      
+
       const significantFiles = gitChanges.files.filter(f => f.insertions + f.deletions > 10);
       if (significantFiles.length > 0) {
         significantFiles.forEach(file => {
@@ -893,7 +928,7 @@ export class CopilotService {
 
   private getFileRelevanceDescription(file: FileChange, jiraTicket: JiraTicket): string {
     const fileName = file.file.toLowerCase();
-    
+
     // Attempt to infer file relevance based on common patterns
     if (fileName.includes('test') || fileName.includes('spec')) {
       return 'testing the implemented functionality';
@@ -915,26 +950,26 @@ export class CopilotService {
   private generateFallbackSummary(jiraTicket: JiraTicket, gitChanges: GitChanges): string {
     const action = this.getActionFromIssueType(jiraTicket.issueType);
     const mainFiles = gitChanges.files.filter(f => f.insertions + f.deletions > 5);
-    const fileContext = mainFiles.length > 0 
+    const fileContext = mainFiles.length > 0
       ? ` across ${mainFiles.length} key file${mainFiles.length > 1 ? 's' : ''}`
       : ` with ${gitChanges.totalFiles} file change${gitChanges.totalFiles > 1 ? 's' : ''}`;
-    
+
     return `${action} ${jiraTicket.summary.toLowerCase()}${fileContext} to address ${jiraTicket.key}`;
   }
 
   private generateEnhancedFallbackSummary(jiraTicket: JiraTicket, gitChanges: GitChanges, repoInfo?: { owner: string; repo: string; currentBranch: string }): string {
     const action = this.getActionFromIssueType(jiraTicket.issueType);
-    
+
     let summary = `## Overview\n`;
     summary += `${action} ${jiraTicket.summary.toLowerCase()} to address ${jiraTicket.key}.\n\n`;
-    
+
     if (jiraTicket.description) {
       summary += `This implementation fulfills the requirements outlined in the JIRA ticket: ${jiraTicket.description.substring(0, 200)}${jiraTicket.description.length > 200 ? '...' : ''}\n\n`;
     }
-    
+
     summary += `## File Changes\n`;
     summary += `Total files modified: ${gitChanges.totalFiles} (+${gitChanges.totalInsertions} insertions, -${gitChanges.totalDeletions} deletions)\n\n`;
-    
+
     gitChanges.files.forEach(file => {
       if (repoInfo) {
         const fileUrl = `https://github.com/${repoInfo.owner}/${repoInfo.repo}/blob/${repoInfo.currentBranch}/${file.file}`;
@@ -943,7 +978,7 @@ export class CopilotService {
         summary += `### \`${file.file}\` (${file.status})\n`;
       }
       summary += `- **Changes**: +${file.insertions} insertions, -${file.deletions} deletions\n`;
-      
+
       // Add specific line URLs for key changes if repo info is available
       if (repoInfo && file.lineNumbers?.added.length && file.lineNumbers.added.length > 0) {
         const fileUrl = `https://github.com/${repoInfo.owner}/${repoInfo.repo}/blob/${repoInfo.currentBranch}/${file.file}`;
@@ -955,7 +990,7 @@ export class CopilotService {
           summary += `- **Key changes**: ${lineLinks}\n`;
         }
       }
-      
+
       if (file.lineNumbers) {
         if (file.lineNumbers.added.length > 0) {
           const addedLines = file.lineNumbers.added.slice(0, 5);
@@ -966,10 +1001,10 @@ export class CopilotService {
           summary += `- **Key removals**: Lines ${removedLines.join(', ')}${file.lineNumbers.removed.length > 5 ? ` (and ${file.lineNumbers.removed.length - 5} more)` : ''}\n`;
         }
       }
-      
+
       summary += `- **Purpose**: ${this.getFileRelevanceDescription(file, jiraTicket)}\n\n`;
     });
-    
+
     summary += `## Key Implementation Details\n`;
     const significantFiles = gitChanges.files.filter(f => f.insertions + f.deletions > 10);
     if (significantFiles.length > 0) {
@@ -984,7 +1019,7 @@ export class CopilotService {
     } else {
       summary += `All changes are relatively small in scope, focusing on targeted modifications to implement the required functionality.\n`;
     }
-    
+
     return summary;
   }
 
@@ -992,11 +1027,11 @@ export class CopilotService {
     // Extract key action and subject from summary
     const action = this.getActionFromIssueType(jiraTicket.issueType);
     const subject = this.extractSubjectFromSummary(jiraTicket.summary);
-    
+
     // Create short title with JIRA ticket ID at the beginning
     const maxDescriptionLength = 60 - jiraTicket.key.length - 2; // Reserve space for "KEY: "
     const description = `${action} ${subject}`;
-    
+
     if (description.length <= maxDescriptionLength) {
       return `${jiraTicket.key}: ${description}`;
     } else {
@@ -1022,8 +1057,82 @@ export class CopilotService {
       .replace(/^(add|implement|create|fix|update|improve|refactor)\s+/i, '')
       .replace(/\s+/g, ' ')
       .trim();
-    
+
     // Capitalize first letter
     return subject.charAt(0).toUpperCase() + subject.slice(1);
+  }
+
+  private extractDiffSummary(diffContent: string): string[] {
+    const summary: string[] = [];
+    const lines = diffContent.split('\n');
+    
+    let addedLines = 0;
+    let removedLines = 0;
+    
+    for (const line of lines) {
+      // Track function/method/class context
+      if (line.match(/^[+-]\s*(function|def|class|interface|export|import|const|let|var)/)) {
+        const match = line.match(/^[+-]\s*(.*)/);
+        if (match) {
+          const declaration = match[1].substring(0, 50);
+          if (line.startsWith('+')) {
+            summary.push(`Added: ${declaration}`);
+          } else if (line.startsWith('-')) {
+            summary.push(`Removed: ${declaration}`);
+          }
+        }
+      }
+      
+      // Track significant code changes
+      if (line.startsWith('+') && !line.startsWith('+++')) {
+        addedLines++;
+        // Capture important additions
+        if (line.match(/^[+]\s*(if|else|for|while|switch|case|try|catch|return|throw)/)) {
+          const codeLine = line.substring(1).trim().substring(0, 60);
+          summary.push(`Added logic: ${codeLine}`);
+        }
+      } else if (line.startsWith('-') && !line.startsWith('---')) {
+        removedLines++;
+        // Capture important removals
+        if (line.match(/^[-]\s*(if|else|for|while|switch|case|try|catch|return|throw)/)) {
+          const codeLine = line.substring(1).trim().substring(0, 60);
+          summary.push(`Removed logic: ${codeLine}`);
+        }
+      }
+      
+      // Capture import/export changes
+      if (line.match(/^[+-]\s*(import|export)/)) {
+        const match = line.match(/^[+-]\s*(.*)/);
+        if (match) {
+          const importExport = match[1].substring(0, 50);
+          if (line.startsWith('+')) {
+            summary.push(`Added dependency: ${importExport}`);
+          } else if (line.startsWith('-')) {
+            summary.push(`Removed dependency: ${importExport}`);
+          }
+        }
+      }
+      
+      // Capture configuration or constant changes
+      if (line.match(/^[+-]\s*.*[=:]\s*(true|false|null|undefined|\d+|['"][^'"]*['"])/)) {
+        const match = line.match(/^[+-]\s*(.*)/);
+        if (match) {
+          const configChange = match[1].trim().substring(0, 50);
+          if (line.startsWith('+')) {
+            summary.push(`Added config: ${configChange}`);
+          } else if (line.startsWith('-')) {
+            summary.push(`Removed config: ${configChange}`);
+          }
+        }
+      }
+    }
+    
+    // Add summary statistics if significant changes
+    if (addedLines > 10 || removedLines > 10) {
+      summary.unshift(`Major changes: +${addedLines} lines, -${removedLines} lines`);
+    }
+    
+    // Limit to most important changes to avoid overwhelming the AI
+    return summary.slice(0, 8);
   }
 }

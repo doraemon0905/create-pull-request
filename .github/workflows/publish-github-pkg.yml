@@ -1,0 +1,41 @@
+name: Publish to GitHub Packages
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish-gpr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Enable Corepack (for Yarn)
+        run: corepack enable
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Update package name for GitHub Packages
+        run: |
+          sed -i 's/"name": "create-pull-request"/"name": "@doraemon0905\/create-pull-request"/' package.json
+
+      - name: Setup npm for GitHub Packages
+        run: |
+          npm config set registry https://npm.pkg.github.com/
+          npm config set //npm.pkg.github.com/:_authToken ${{ secrets.GH_TOKEN }}
+
+      - name: Publish to GitHub Packages
+        run: npm publish

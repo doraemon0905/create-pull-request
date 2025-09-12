@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { CONFIG } from '../constants';
 
 export interface JiraConfig {
     baseUrl: string;
@@ -42,18 +43,25 @@ export interface EnvironmentConfig {
     version: string;
 }
 
-const CONFIG_FILE = path.join(os.homedir(), '.create-pr', 'env-config.json');
+/**
+ * Get the configuration file path
+ * @returns The full path to the configuration file
+ */
+export function getConfigFilePath(): string {
+    return path.join(os.homedir(), CONFIG.DIRECTORY_NAME, CONFIG.FILE_NAME);
+}
 
 /**
  * Load configuration from JSON file
  */
 export function loadConfig(): EnvironmentConfig {
-    if (!fs.existsSync(CONFIG_FILE)) {
-        throw new Error(`Configuration file not found at ${CONFIG_FILE}. Please run 'create-pr setup' to create your configuration.`);
+    const configFile = getConfigFilePath();
+    if (!fs.existsSync(configFile)) {
+        throw new Error(`Configuration file not found at ${configFile}. Please run 'create-pr setup' to create your configuration.`);
     }
 
     try {
-        const configData = fs.readFileSync(CONFIG_FILE, 'utf8');
+        const configData = fs.readFileSync(configFile, 'utf8');
         const config = JSON.parse(configData);
         return config;
     } catch (error) {
@@ -106,15 +114,8 @@ export function validateConfig(): boolean {
 }
 
 /**
- * Get configuration file path
- */
-export function getConfigFilePath(): string {
-    return CONFIG_FILE;
-}
-
-/**
  * Check if JSON config file exists
  */
 export function hasJsonConfig(): boolean {
-    return fs.existsSync(CONFIG_FILE);
+    return fs.existsSync(getConfigFilePath());
 }

@@ -5,7 +5,8 @@ import { JiraService } from '../services/jira';
 import { GitHubService } from '../services/github';
 import { GitService } from '../services/git';
 import { CopilotService } from '../services/copilot';
-import { validateJiraTicket, validateGitRepository } from '../utils/validation';
+import { validateJiraTicket, validateGitRepository, extractJiraTicketFromBranch } from '../utils/validation';
+import { CONFIG } from '../constants';
 
 export interface CreatePROptions {
   jira?: string;
@@ -47,9 +48,24 @@ export async function createPullRequest(options: CreatePROptions): Promise<void>
       }
     }
 
-    // Get Jira ticket
+    // Get current branch first to potentially extract Jira ticket from it
+    spinner.start('Analyzing repository and changes...');
+    const currentBranch = await gitService.getCurrentBranch();
+    
+    // Get Jira ticket - try to extract from branch name if not provided
     let jiraTicket = options.jira;
     if (!jiraTicket) {
+      // Try to extract Jira ticket ID from branch name
+      const extractedTicket = extractJiraTicketFromBranch(currentBranch);
+      if (extractedTicket) {
+        jiraTicket = extractedTicket;
+        console.log(chalk.green(`✅ Detected Jira ticket from branch name: ${jiraTicket}`));
+      }
+    }
+
+    // If still no ticket, prompt user
+    if (!jiraTicket) {
+      spinner.stop();
       const { ticket } = await inquirer.prompt([{
         type: 'input',
         name: 'ticket',
@@ -63,6 +79,7 @@ export async function createPullRequest(options: CreatePROptions): Promise<void>
         }
       }]);
       jiraTicket = ticket.trim().toUpperCase();
+      spinner.start('Analyzing repository and changes...');
     }
 
     if (!validateJiraTicket(jiraTicket!)) {
@@ -70,14 +87,11 @@ export async function createPullRequest(options: CreatePROptions): Promise<void>
     }
 
     // Fetch Jira ticket information
-    spinner.start('Fetching Jira ticket information...');
+    spinner.text = 'Fetching Jira ticket information...';
     const ticketInfo = await jiraService.getTicket(jiraTicket!);
-    spinner.succeed(`Fetched Jira ticket: ${ticketInfo.key} - ${ticketInfo.summary}`);
-
-    // Get current branch and repository info
-    spinner.start('Analyzing repository and changes...');
-    const currentBranch = await gitService.getCurrentBranch();
-    const baseBranch = options.base || 'main';
+    spinner.text = 'Analyzing repository and changes...';
+    
+    const baseBranch = options.base || CONFIG.DEFAULT_BRANCH;
     
     // Validate base branch exists
     const baseExists = await gitService.branchExists(baseBranch);
@@ -89,6 +103,8 @@ export async function createPullRequest(options: CreatePROptions): Promise<void>
     const gitChanges = await gitService.getChanges(baseBranch, true);
     const repo = await githubService.getCurrentRepo();
     spinner.succeed(`Repository: ${repo.owner}/${repo.repo}, Branch: ${currentBranch}`);
+    
+    console.log(chalk.green(`🎫 Using Jira ticket: ${ticketInfo.key} - ${ticketInfo.summary}`));
 
     if (gitChanges.totalFiles === 0) {
       throw new Error(`No changes detected between '${baseBranch}' and '${currentBranch}'`);

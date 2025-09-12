@@ -34,6 +34,11 @@ export interface EnvironmentConfig {
     version: string;
 }
 /**
+ * Get the configuration file path
+ * @returns The full path to the configuration file
+ */
+export declare function getConfigFilePath(): string;
+/**
  * Load configuration from JSON file
  */
 export declare function loadConfig(): EnvironmentConfig;
@@ -49,10 +54,6 @@ export declare function getConfigValue<T extends keyof EnvironmentConfig, K exte
  * Check if configuration exists and is valid
  */
 export declare function validateConfig(): boolean;
-/**
- * Get configuration file path
- */
-export declare function getConfigFilePath(): string;
 /**
  * Check if JSON config file exists
  */

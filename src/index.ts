@@ -7,21 +7,22 @@ import { createPullRequest } from './commands/create-pr';
 import { validateEnvironment } from './utils/validation';
 import { spawn } from 'child_process';
 import path from 'path';
+import { CONFIG } from './constants';
 
 config();
 
 const program = new Command();
 
 program
-  .name('create-pr')
+  .name(CONFIG.CLI_NAME)
   .description('CLI tool to automatically generate pull request descriptions based on Jira tickets and file changes')
-  .version('1.0.0');
+  .version(CONFIG.CLI_VERSION);
 
 program
   .command('create')
   .description('Create a pull request with auto-generated description')
-  .option('-j, --jira <ticket>', 'Jira ticket ID (e.g., PROJ-123)')
-  .option('-b, --base <branch>', 'Base branch for the pull request', 'main')
+  .option('-j, --jira <ticket>', 'Jira ticket ID (e.g., PROJ-123). If not provided, will attempt to extract from branch name')
+  .option('-b, --base <branch>', 'Base branch for the pull request', CONFIG.DEFAULT_BRANCH)
   .option('-t, --title <title>', 'Pull request title (optional)')
   .option('-d, --draft', 'Create as draft pull request')
   .option('--dry-run', 'Generate description without creating PR')
@@ -65,6 +66,7 @@ program
     console.log('• The tool will automatically prioritize ChatGPT → Gemini → Copilot');
     console.log('• At least one AI provider is required for generating PR descriptions');
     console.log('• The setup wizard creates a global config file for easier management');
+    console.log('• Jira ticket IDs will be auto-detected from branch names (e.g., ft/ET-123, feature-PROJ-456)');
   });
 
 program
@@ -93,6 +95,40 @@ program
       
       setupProcess.on('error', (error) => {
         console.error(chalk.red('\n❌ Failed to run setup:'), error.message);
+        process.exit(1);
+      });
+    } catch (error) {
+      console.error(chalk.red('❌ Error:'), error instanceof Error ? error.message : 'Unknown error');
+      process.exit(1);
+    }
+  });
+
+program
+  .command('git-extension')
+  .description('Set up git extension to enable "git create-pr" command')
+  .action(async () => {
+    try {
+      console.log(chalk.blue('🔧 Setting up git extension...\n'));
+      
+      const setupScript = path.join(__dirname, '..', 'scripts', 'setup-git-extension.js');
+      
+      const setupProcess = spawn('node', [setupScript], {
+        stdio: 'inherit',
+        shell: true
+      });
+      
+      setupProcess.on('close', (code) => {
+        if (code === 0) {
+          console.log(chalk.green('\n✅ Git extension setup completed!'));
+          console.log(chalk.gray('You can now use "git create-pr" command after updating your PATH.'));
+        } else {
+          console.error(chalk.red('\n❌ Git extension setup failed with exit code:'), code);
+          process.exit(1);
+        }
+      });
+      
+      setupProcess.on('error', (error) => {
+        console.error(chalk.red('\n❌ Failed to run git extension setup:'), error.message);
         process.exit(1);
       });
     } catch (error) {

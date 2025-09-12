@@ -1,15 +1,16 @@
 {
   "name": "publish-pull-request",
-  "version": "1.1.2",
+  "version": "1.1.5",
   "description": "CLI tool to automatically generate pull request descriptions based on Jira tickets and file changes using GitHub Copilot API",
   "main": "lib/index.js",
   "bin": {
     "create-pr": "./bin/create-pr"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/build-optimized.js",
+    "build:tsc": "tsc",
     "dev": "ts-node src/index.ts",
-    "lint": "eslint src/**/*.ts",
+    "lint": "eslint src/**/*.ts --cache --cache-location node_modules/.cache/.eslintcache",
     "test": "jest",
     "setup-env": "node scripts/setup-env.js",
     "prepare": "npm run build",
