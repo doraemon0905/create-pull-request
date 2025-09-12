@@ -34,7 +34,7 @@ export interface AIConfig {
   model?: string;
 }
 
-export class CopilotService {
+export class AIDescriptionGeneratorService {
   private clients: Map<AIProvider, AxiosInstance> = new Map();
   private selectedProvider: AIProvider | null = null;
 
@@ -457,13 +457,8 @@ export class CopilotService {
       }
 
       if (file.diffContent) {
-<<<<<<< HEAD
-        const truncatedDiff = file.diffContent.length > 1500 
-          ? file.diffContent.substring(0, 1500) + '\n... (truncated for brevity)'
-=======
         const truncatedDiff = file.diffContent.length > LIMITS.MAX_DIFF_CONTENT_LENGTH
           ? file.diffContent.substring(0, LIMITS.MAX_DIFF_CONTENT_LENGTH) + '\n... (truncated for brevity)'
->>>>>>> main
           : file.diffContent;
         prompt += `- COMPLETE code changes for analysis:\n\`\`\`diff\n${truncatedDiff}\n\`\`\`\n`;
         prompt += `- MANDATORY: Analyze this diff and explain HOW each change addresses the JIRA ticket requirements\n`;

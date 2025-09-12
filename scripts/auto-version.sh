@@ -360,7 +360,6 @@ if [ "$DRY_RUN" = true ]; then
     print_status "Would bump version: $current_version -> $version_type"
     
     # Simulate version bump
-    local new_version
     new_version=$(npm version "$version_type" --dry-run 2>/dev/null | grep -o 'v.*' || echo "simulated")
     print_status "New version would be: $new_version"
     
