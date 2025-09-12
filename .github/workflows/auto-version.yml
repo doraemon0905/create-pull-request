@@ -1,10 +1,6 @@
 name: 🏷️ Auto Version Update
 
 on:
-  push:
-    branches:
-      - main
-      - master
   pull_request:
     types: [closed]
     branches:
