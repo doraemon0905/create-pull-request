@@ -133,7 +133,6 @@ export class AIDescriptionGeneratorService {
         summary
       };
     } catch (error) {
-      console.error(error);
       return this.tryFallbackProviders(options);
     }
   }
@@ -607,7 +606,6 @@ export class AIDescriptionGeneratorService {
           throw new Error(`Unsupported AI provider: ${provider}`);
       }
     } catch (error) {
-      console.error(`${provider.toUpperCase()} API failed:`, error);
       throw new Error(`${provider.toUpperCase()} API not available`);
     }
   }

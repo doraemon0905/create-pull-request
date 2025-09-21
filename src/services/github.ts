@@ -200,12 +200,6 @@ export class GitHubService {
       const response = await this.octokit.rest.pulls.create(prData);
       return response.data;
     } catch (error: any) {
-      console.error('GitHub API Error Details:', {
-        status: error.status,
-        message: error.message,
-        response: error.response?.data
-      });
-
       // Handle specific error cases
       if (error.status === 401) {
         throw new Error('Authentication failed. Please check your GitHub token.');
