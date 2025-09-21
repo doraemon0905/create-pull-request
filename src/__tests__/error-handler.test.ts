@@ -1,5 +1,6 @@
 import { 
-  handleError, 
+  handleError,
+  handleErrorWithPrefix, 
   formatErrorMessage, 
   isAxiosError, 
   extractErrorDetails,
@@ -236,18 +237,18 @@ describe('Error Handler Utils', () => {
     });
   });
 
-  describe('handleError', () => {
+  describe('handleErrorWithPrefix', () => {
     it('should log and throw formatted error', () => {
       const error = new Error('Test error');
 
-      expect(() => handleError(error)).toThrow('Test error');
+      expect(() => handleErrorWithPrefix(error)).toThrow('Test error');
       expect(consoleSpy).toHaveBeenCalledWith('Error:', 'Test error');
     });
 
     it('should log and throw with custom prefix', () => {
       const error = new Error('API error');
 
-      expect(() => handleError(error, 'API Request')).toThrow('API error');
+      expect(() => handleErrorWithPrefix(error, 'API Request')).toThrow('API error');
       expect(consoleSpy).toHaveBeenCalledWith('API Request Error:', 'API error');
     });
 
@@ -262,7 +263,7 @@ describe('Error Handler Utils', () => {
         message: 'Request failed'
       };
 
-      expect(() => handleError(axiosError)).toThrow();
+      expect(() => handleErrorWithPrefix(axiosError)).toThrow();
       expect(consoleSpy).toHaveBeenCalledWith(
         'Error:',
         expect.stringContaining('HTTP Error (500)')
@@ -273,14 +274,14 @@ describe('Error Handler Utils', () => {
       const originalError = new Error('Original error');
 
       try {
-        handleError(originalError);
+        handleErrorWithPrefix(originalError);
       } catch (thrownError) {
         expect(thrownError).toBe(originalError);
       }
     });
 
     it('should handle non-error inputs', () => {
-      expect(() => handleError('String error')).toThrow('String error');
+      expect(() => handleErrorWithPrefix('String error')).toThrow('String error');
       expect(consoleSpy).toHaveBeenCalledWith('Error:', 'String error');
     });
   });
@@ -366,7 +367,7 @@ describe('Error Handler Utils', () => {
       const originalStack = originalError.stack;
 
       try {
-        handleError(originalError);
+        handleErrorWithPrefix(originalError);
       } catch (thrownError) {
         expect(thrownError.stack).toBe(originalStack);
       }
@@ -379,7 +380,7 @@ describe('Error Handler Utils', () => {
       });
 
       try {
-        handleError(customError);
+        handleErrorWithPrefix(customError);
       } catch (thrownError) {
         expect(thrownError.code).toBe('CUSTOM_CODE');
         expect(thrownError.details).toEqual({ field: 'username', value: 'invalid' });

@@ -183,8 +183,8 @@ export function formatErrorMessage(error: any): string {
   }
 }
 
-// Update handleError to accept prefix and not exit process (for testing)
-export function handleError(error: unknown, prefix: string = ''): never {
+// Handle error with prefix and re-throw (for testing)
+export function handleErrorWithPrefix(error: unknown, prefix: string = ''): never {
   const formattedMessage = formatErrorMessage(error);
   const logPrefix = prefix ? `${prefix} Error:` : 'Error:';
   

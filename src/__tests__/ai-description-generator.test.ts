@@ -96,7 +96,7 @@ describe('AIDescriptionGeneratorService', () => {
 
   describe('constructor', () => {
     it('should initialize with available AI providers', () => {
-      expect(mockedAxios.create).toHaveBeenCalledTimes(3); // Claude, ChatGPT, Gemini
+      expect(mockedAxios.create).toHaveBeenCalledTimes(4); // Claude, ChatGPT, Gemini, Copilot
     });
   });
 
@@ -324,8 +324,8 @@ describe('AIDescriptionGeneratorService', () => {
       const optionsWithTemplate = {
         ...mockOptions,
         template: {
-          content: '## Description\n{{description}}\n\n## Testing\n- [ ] Manual testing',
-          path: '.github/pull_request_template.md'
+          name: 'Default Template',
+          content: '## Description\n{{description}}\n\n## Testing\n- [ ] Manual testing'
         }
       };
 
@@ -357,7 +357,7 @@ describe('AIDescriptionGeneratorService', () => {
       const result = await service.generatePRDescription(mockOptions);
 
       expect(result.title).toBe('PROJ-123: Valid JSON');
-      expect(result.body).toBe('## Summary\\nValid JSON response');
+      expect(result.body).toBe('## Summary\nValid JSON response');
     });
 
     it('should handle JSON wrapped in markdown code blocks', async () => {
@@ -373,7 +373,7 @@ describe('AIDescriptionGeneratorService', () => {
       const result = await service.generatePRDescription(mockOptions);
 
       expect(result.title).toBe('PROJ-123: Markdown JSON');
-      expect(result.body).toBe('## Summary\\nJSON in markdown');
+      expect(result.body).toBe('## Summary\nJSON in markdown');
     });
 
     it('should extract title from non-JSON response', async () => {

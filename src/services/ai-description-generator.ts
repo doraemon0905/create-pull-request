@@ -246,16 +246,15 @@ export class AIDescriptionGeneratorService {
 
       // Add GitHub file URL if repository info is available
       if (repoInfo) {
-        const fileUrl = `https://github.com/${repoInfo.owner}/${repoInfo.repo}/blob/${repoInfo.currentBranch}/${file.file}`;
+        const fileUrl = this.generateFileUrl(repoInfo, file.file);
         summaryPrompt += `- GitHub URL: ${fileUrl}\n`;
 
         // Add specific line URLs for key changes
         if (file.lineNumbers?.added.length && file.lineNumbers.added.length > 0) {
           const keyLines = file.lineNumbers.added.slice(0, 3);
-          if (keyLines.length === 1) {
-            summaryPrompt += `- Key change at line: ${fileUrl}#L${keyLines[0]}\n`;
-          } else if (keyLines.length > 1) {
-            summaryPrompt += `- Key changes at lines: ${keyLines.map(line => `${fileUrl}#L${line}`).join(', ')}\n`;
+          if (keyLines.length > 0) {
+            const lineLinks = this.generateLineLinks(repoInfo, file.file, keyLines);
+            summaryPrompt += `- Key changes at lines: ${lineLinks}\n`;
           }
         }
       }
@@ -640,14 +639,50 @@ export class AIDescriptionGeneratorService {
     }
   }
 
-  private async callClaudeAPI(client: AxiosInstance, prompt: string): Promise<any> {
-    let aiProvidersConfig;
+  private getAIProvidersConfig() {
     try {
-      aiProvidersConfig = getConfig('aiProviders');
+      return getConfig('aiProviders');
     } catch {
-      aiProvidersConfig = null;
+      return null;
     }
-    const model = aiProvidersConfig?.claude?.model || process.env.CLAUDE_MODEL || DEFAULT_MODELS.CLAUDE;
+  }
+
+  private getModelForProvider(provider: AIProvider): string {
+    const aiProvidersConfig = this.getAIProvidersConfig();
+    
+    switch (provider) {
+      case 'claude':
+        return aiProvidersConfig?.claude?.model || process.env.CLAUDE_MODEL || DEFAULT_MODELS.CLAUDE;
+      case 'chatgpt':
+        return aiProvidersConfig?.openai?.model || process.env.OPENAI_MODEL || DEFAULT_MODELS.OPENAI;
+      case 'gemini':
+        return aiProvidersConfig?.gemini?.model || process.env.GEMINI_MODEL || DEFAULT_MODELS.GEMINI;
+      case 'copilot':
+        return aiProvidersConfig?.copilot?.model || process.env.COPILOT_MODEL || DEFAULT_MODELS.COPILOT;
+      default:
+        throw new Error(`Unsupported provider: ${provider}`);
+    }
+  }
+
+  private generateFileUrl(repoInfo: { owner: string; repo: string; currentBranch: string }, filePath: string): string {
+    return `https://github.com/${repoInfo.owner}/${repoInfo.repo}/blob/${repoInfo.currentBranch}/${filePath}`;
+  }
+
+  private generateLineUrl(repoInfo: { owner: string; repo: string; currentBranch: string }, filePath: string, lineNumber: number): string {
+    return `${this.generateFileUrl(repoInfo, filePath)}#L${lineNumber}`;
+  }
+
+  private generateLineLinks(repoInfo: { owner: string; repo: string; currentBranch: string }, filePath: string, lineNumbers: number[]): string {
+    if (lineNumbers.length === 1) {
+      return `[Line ${lineNumbers[0]}](${this.generateLineUrl(repoInfo, filePath, lineNumbers[0])})`;
+    } else if (lineNumbers.length > 1) {
+      return lineNumbers.map(line => `[L${line}](${this.generateLineUrl(repoInfo, filePath, line)})`).join(', ');
+    }
+    return '';
+  }
+
+  private async callClaudeAPI(client: AxiosInstance, prompt: string): Promise<any> {
+    const model = this.getModelForProvider('claude');
 
     const response = await client.post('/v1/messages', {
       model: model,
@@ -668,13 +703,7 @@ export class AIDescriptionGeneratorService {
   }
 
   private async callChatGPTAPI(client: AxiosInstance, prompt: string): Promise<any> {
-    let aiProvidersConfig;
-    try {
-      aiProvidersConfig = getConfig('aiProviders');
-    } catch {
-      aiProvidersConfig = null;
-    }
-    const model = aiProvidersConfig?.openai?.model || process.env.OPENAI_MODEL || DEFAULT_MODELS.OPENAI;
+    const model = this.getModelForProvider('chatgpt');
 
     const response = await client.post('/chat/completions', {
       model: model,
@@ -695,13 +724,8 @@ export class AIDescriptionGeneratorService {
   }
 
   private async callGeminiAPI(client: AxiosInstance, prompt: string): Promise<any> {
-    let aiProvidersConfig;
-    try {
-      aiProvidersConfig = getConfig('aiProviders');
-    } catch {
-      aiProvidersConfig = null;
-    }
-    const model = aiProvidersConfig?.gemini?.model || process.env.GEMINI_MODEL || DEFAULT_MODELS.GEMINI;
+    const model = this.getModelForProvider('gemini');
+    const aiProvidersConfig = this.getAIProvidersConfig();
     const apiKey = aiProvidersConfig?.gemini?.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
     const response = await client.post(`/models/${model}:generateContent?key=${apiKey}`, {
@@ -723,13 +747,7 @@ export class AIDescriptionGeneratorService {
   }
 
   private async callCopilotAPI(client: AxiosInstance, prompt: string): Promise<any> {
-    let aiProvidersConfig;
-    try {
-      aiProvidersConfig = getConfig('aiProviders');
-    } catch {
-      aiProvidersConfig = null;
-    }
-    const model = aiProvidersConfig?.copilot?.model || process.env.COPILOT_MODEL || DEFAULT_MODELS.COPILOT;
+    const model = this.getModelForProvider('copilot');
 
     const response = await client.post('/chat/completions', {
       model: model,
@@ -1014,7 +1032,7 @@ export class AIDescriptionGeneratorService {
 
     gitChanges.files.forEach(file => {
       if (repoInfo) {
-        const fileUrl = `https://github.com/${repoInfo.owner}/${repoInfo.repo}/blob/${repoInfo.currentBranch}/${file.file}`;
+        const fileUrl = this.generateFileUrl(repoInfo, file.file);
         summary += `### [${file.file}](${fileUrl}) (${file.status})\n`;
       } else {
         summary += `### \`${file.file}\` (${file.status})\n`;
@@ -1023,12 +1041,9 @@ export class AIDescriptionGeneratorService {
 
       // Add specific line URLs for key changes if repo info is available
       if (repoInfo && file.lineNumbers?.added.length && file.lineNumbers.added.length > 0) {
-        const fileUrl = `https://github.com/${repoInfo.owner}/${repoInfo.repo}/blob/${repoInfo.currentBranch}/${file.file}`;
         const keyLines = file.lineNumbers.added.slice(0, 3);
-        if (keyLines.length === 1) {
-          summary += `- **Key change**: [Line ${keyLines[0]}](${fileUrl}#L${keyLines[0]})\n`;
-        } else if (keyLines.length > 1) {
-          const lineLinks = keyLines.map(line => `[L${line}](${fileUrl}#L${line})`).join(', ');
+        if (keyLines.length > 0) {
+          const lineLinks = this.generateLineLinks(repoInfo, file.file, keyLines);
           summary += `- **Key changes**: ${lineLinks}\n`;
         }
       }
