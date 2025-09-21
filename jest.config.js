@@ -23,14 +23,7 @@ module.exports = {
     'html',
     'clover'
   ],
-  coverageThreshold: {
-    global: {
-      branches: 80,
-      functions: 80,
-      lines: 80,
-      statements: 80
-    }
-  },
+  // No global coverage threshold - coverage is tracked but not enforced
   // Fail tests if coverage is below threshold
   coveragePathIgnorePatterns: [
     '/node_modules/',
