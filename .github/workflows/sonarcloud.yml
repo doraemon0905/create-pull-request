@@ -58,6 +58,7 @@ jobs:
           name: coverage-report-20
           path: coverage/
           github-token: ${{ secrets.GH_TOKEN }}
+        continue-on-error: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -70,6 +71,16 @@ jobs:
 
       - name: Build project
         run: npm run build
+
+      - name: Generate coverage if artifact not found
+        run: |
+          if [ ! -f "coverage/lcov.info" ]; then
+            echo "⚠️ Coverage artifact not found, generating coverage locally..."
+            npm test -- --coverage --watchAll=false
+            echo "✅ Coverage generated locally"
+          else
+            echo "✅ Using coverage from CI artifact"
+          fi
 
       - name: Verify coverage file exists
         run: |
