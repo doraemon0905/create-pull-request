@@ -102,7 +102,7 @@ export function getConfigValue<T extends keyof EnvironmentConfig, K extends keyo
 export function validateConfig(): boolean {
     try {
         const config = loadConfig();
-        
+
         // Check required fields
         const required = [
             config.jira.baseUrl,
@@ -110,9 +110,9 @@ export function validateConfig(): boolean {
             config.jira.apiToken,
             config.github.token
         ];
-        
+
         return required.every(field => field && field.trim().length > 0);
-    } catch {
+    } catch (error) {
         return false;
     }
 }
