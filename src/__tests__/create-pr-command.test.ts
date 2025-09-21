@@ -1,8 +1,5 @@
 import { createPullRequest, CreatePROptions } from '../commands/create-pr';
-import { JiraService } from '../services/jira';
 import { GitService } from '../services/git';
-import { GitHubService } from '../services/github';
-import { AIDescriptionGeneratorService } from '../services/ai-description-generator';
 import { validateConfig } from '../utils/config';
 
 // Mock dependencies
@@ -23,17 +20,14 @@ jest.mock('ora', () => ({
   })
 }));
 
-const mockJiraService = new JiraService() as jest.Mocked<JiraService>;
 const mockGitService = new GitService() as jest.Mocked<GitService>;
-const mockGitHubService = new GitHubService() as jest.Mocked<GitHubService>;
-const mockAIService = new AIDescriptionGeneratorService() as jest.Mocked<AIDescriptionGeneratorService>;
 const mockValidateConfig = validateConfig as jest.MockedFunction<typeof validateConfig>;
 
 describe('Create PR Command', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockValidateConfig.mockReturnValue(true);
-    
+
     // Mock console methods
     jest.spyOn(console, 'log').mockImplementation();
     jest.spyOn(console, 'error').mockImplementation();
@@ -67,7 +61,7 @@ describe('Create PR Command', () => {
       mockGitService.getCurrentBranch = jest.fn().mockResolvedValue('feature/PROJ-123');
       mockGitService.hasUncommittedChanges = jest.fn().mockResolvedValue(false);
       mockGitService.branchExists = jest.fn().mockResolvedValue(true); // Mock that 'main' branch exists
-      
+
       // Test should not throw for dry run
       await expect(createPullRequest(dryRunOptions)).resolves.toBeUndefined();
     });

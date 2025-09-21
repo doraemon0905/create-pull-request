@@ -1,16 +1,13 @@
 import { Octokit } from '@octokit/rest';
-import * as fs from 'fs';
 import { GitHubService } from '../services/github';
 import { getConfig } from '../utils/config';
 
 // Mock dependencies
 jest.mock('@octokit/rest');
-jest.mock('fs');
 jest.mock('../utils/config');
 jest.mock('simple-git');
 
 const MockedOctokit = Octokit as jest.MockedClass<typeof Octokit>;
-const mockedFs = fs as jest.Mocked<typeof fs>;
 const mockedGetConfig = getConfig as jest.MockedFunction<typeof getConfig>;
 
 describe('GitHubService', () => {
