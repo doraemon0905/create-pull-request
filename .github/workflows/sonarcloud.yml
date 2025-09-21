@@ -36,16 +36,13 @@ jobs:
           echo "Event: ${{ github.event_name }}"
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "Triggered by: ${{ github.event.inputs.triggered_by }}"
-            echo "CI Run ID: ${{ github.event.inputs.ci_run_id }}"
           elif [ "${{ github.event_name }}" == "repository_dispatch" ]; then
             echo "Triggered by: Repository dispatch event"
             echo "Event Type: ${{ github.event.action }}"
             echo "Triggered by: ${{ github.event.client_payload.triggered_by }}"
-            echo "CI Run ID: ${{ github.event.client_payload.ci_run_id }}"
           elif [ "${{ github.event_name }}" == "workflow_run" ]; then
             echo "Triggered by: CI workflow completion"
             echo "CI Workflow: ${{ github.event.workflow_run.name }}"
-            echo "CI Run ID: ${{ github.event.workflow_run.id }}"
           fi
           echo ""
 

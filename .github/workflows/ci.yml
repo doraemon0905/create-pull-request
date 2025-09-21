@@ -474,8 +474,7 @@ jobs:
                   body: JSON.stringify({
                     ref: sourceBranch,
                     inputs: {
-                      triggered_by: 'ci-pipeline',
-                      ci_run_id: context.runId
+                      triggered_by: 'ci-pipeline'
                     }
                   })
                 });
