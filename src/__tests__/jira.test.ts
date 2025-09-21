@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import { JiraService, JiraTicket } from '../services/jira';
+import { JiraService } from '../services/jira';
 import { getConfig } from '../utils/config';
 import { validateJiraTicket } from '../utils/validation';
 

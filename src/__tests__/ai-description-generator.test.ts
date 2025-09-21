@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AIDescriptionGeneratorService, GenerateDescriptionOptions, AIProvider } from '../services/ai-description-generator';
+import { AIDescriptionGeneratorService, GenerateDescriptionOptions } from '../services/ai-description-generator';
 import { getConfig } from '../utils/config';
 
 // Mock dependencies

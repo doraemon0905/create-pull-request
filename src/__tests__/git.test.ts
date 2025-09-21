@@ -1,5 +1,5 @@
 import simpleGit, { SimpleGit, DiffResult } from 'simple-git';
-import { GitService, GitChanges } from '../services/git';
+import { GitService } from '../services/git';
 import { REGEX_PATTERNS } from '../constants';
 
 // Mock dependencies

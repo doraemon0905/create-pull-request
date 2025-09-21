@@ -152,7 +152,7 @@ export function formatErrorMessage(error: any): string {
   const details = extractErrorDetails(error);
 
   switch (details.type) {
-    case 'HTTP_ERROR':
+    case 'HTTP_ERROR': {
       let message = `HTTP Error (${details.statusCode})`;
       if (details.responseData?.message) {
         message += `: ${details.responseData.message}`;
@@ -163,20 +163,23 @@ export function formatErrorMessage(error: any): string {
         message += ` [${details.url}]`;
       }
       return message;
+    }
 
-    case 'NETWORK_ERROR':
+    case 'NETWORK_ERROR': {
       let netMessage = details.message || 'Network Error';
       if (details.code) {
         netMessage += ` (${details.code})`;
       }
       return netMessage;
+    }
 
-    case 'GENERIC_ERROR':
+    case 'GENERIC_ERROR': {
       let genMessage = details.message || 'Error occurred';
       if (details.code) {
         genMessage += ` [${details.code}]`;
       }
       return genMessage;
+    }
 
     default:
       return details.message || 'Unknown error occurred';

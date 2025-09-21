@@ -350,6 +350,7 @@ describe('Config Utils', () => {
     });
 
     it('should handle missing copilot section', () => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { copilot, ...configWithoutCopilot } = mockValidConfig;
 
       mockedFs.readFileSync.mockReturnValue(JSON.stringify(configWithoutCopilot));

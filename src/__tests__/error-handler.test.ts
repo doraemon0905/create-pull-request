@@ -1,11 +1,9 @@
 import { 
-  handleError,
   handleErrorWithPrefix, 
   formatErrorMessage, 
   isAxiosError, 
   extractErrorDetails,
-  createError,
-  ErrorDetails
+  createError
 } from '../utils/error-handler';
 
 // Mock console to test logging

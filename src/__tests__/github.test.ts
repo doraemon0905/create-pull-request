@@ -1,6 +1,6 @@
 import { Octokit } from '@octokit/rest';
 import * as fs from 'fs';
-import { GitHubService, PullRequestTemplate, RepositoryInfo } from '../services/github';
+import { GitHubService, RepositoryInfo } from '../services/github';
 import { getConfig } from '../utils/config';
 
 // Mock dependencies
