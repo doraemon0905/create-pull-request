@@ -3,7 +3,6 @@
 Please include the URL to the related ticket or issue here. 
 Example: https://jira.yourcompany.com/browse/PROJECT-123
 -->
-[TICKET_URL_HERE]
 
 ---
 
@@ -12,10 +11,6 @@ Example: https://jira.yourcompany.com/browse/PROJECT-123
 Provide a brief description of the changes introduced in this PR. 
 Focus on *what* was changed and *why*. Avoid excessive technical detail here — that can go in comments or the commit message.
 -->
-
-- Change 1: 
-- Change 2: 
-- Change 3: 
 
 ---
 
