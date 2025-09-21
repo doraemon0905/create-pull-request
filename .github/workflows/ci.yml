@@ -419,55 +419,12 @@ jobs:
             console.log(`🚀 Triggering SonarCloud analysis for ${owner}/${repo}@${ref}`);
             console.log(`📊 All CI jobs completed successfully, including report job`);
             
-            try {
-              // Method 1: Try workflow_dispatch with workflow name
-              console.log('🔍 Attempting workflow_dispatch with workflow name...');
-              const response = await github.rest.actions.createWorkflowDispatch({
-                owner,
-                repo,
-                workflow_id: 'SonarCloud Analysis',
-                ref: ref,
-                inputs: {
-                  triggered_by: 'ci-pipeline',
-                  ci_run_id: context.runId
-                }
-              });
-              
-              console.log('✅ SonarCloud workflow triggered successfully');
-              console.log(`📋 Response status: ${response.status}`);
-              return;
-              
-            } catch (error) {
-              console.log('⚠️ Workflow dispatch failed, trying repository dispatch...');
-              console.log(`Error: ${error.message}`);
-              
-              try {
-                // Method 2: Try repository dispatch
-                const dispatchResponse = await github.rest.repos.createDispatchEvent({
-                  owner,
-                  repo,
-                  event_type: 'sonarcloud-trigger',
-                  client_payload: {
-                    triggered_by: 'ci-pipeline',
-                    ci_run_id: context.runId,
-                    ref: ref
-                  }
-                });
-                
-                console.log('✅ Repository dispatch event created successfully');
-                console.log(`📋 Response status: ${dispatchResponse.status}`);
-                return;
-                
-              } catch (dispatchError) {
-                console.log('⚠️ Repository dispatch also failed, trying direct API call...');
-                console.log(`Error: ${dispatchError.message}`);
-                
-                // Method 3: Direct API call using fetch
+            // Method 3: Direct API call using fetch
                 const apiResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/SonarCloud%20Analysis/dispatches`, {
                   method: 'POST',
                   headers: {
                     'Accept': 'application/vnd.github.v3+json',
-                    'Authorization': `token ${github.token}`,
+                    'Authorization': `Bearer ${github.token}`,
                     'Content-Type': 'application/json'
                   },
                   body: JSON.stringify({
@@ -487,5 +444,4 @@ jobs:
                   console.log(`❌ Direct API call failed: ${apiResponse.status} - ${errorText}`);
                   throw new Error(`All trigger methods failed. Last error: ${apiResponse.status}`);
                 }
-              }
             }
