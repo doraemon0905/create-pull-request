@@ -449,11 +449,12 @@ jobs:
             
              // Method 3: Direct API call using fetch (similar to curl command)
                 console.log('🔍 Attempting direct API call to workflow file...');
+                console.log('🔑 Using GH_TOKEN from secrets');
                 const apiResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/sonarcloud.yml/dispatches`, {
                   method: 'POST',
                   headers: {
                     'Accept': 'application/vnd.github+json',
-                    'Authorization': `Bearer ${github.token}`,
+                    'Authorization': `Bearer ${{ secrets.GH_TOKEN }}`,
                     'X-GitHub-Api-Version': '2022-11-28'
                   },
                   body: JSON.stringify({
