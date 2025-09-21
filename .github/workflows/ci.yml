@@ -9,6 +9,11 @@ on:
     # Run weekly security audits on Sundays at 2 AM UTC
     - cron: '0 2 * * 0'
 
+# Cancel previous runs when a new commit is pushed to the same branch or PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Validate code quality on all pushes and PRs
   validate:
@@ -19,6 +24,17 @@ jobs:
         node-version: [18, 20, 22]  # Test multiple Node.js versions
     
     steps:
+      - name: Check if run was cancelled
+        run: |
+          echo "🔍 CI Run Information:"
+          echo "Workflow: ${{ github.workflow }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Run ID: ${{ github.run_id }}"
+          echo ""
+          echo "✅ This run is proceeding (previous runs cancelled if any)"
       - name: 🔍 Checkout code
         uses: actions/checkout@v4
       
@@ -201,6 +217,18 @@ jobs:
   security:
     runs-on: ubuntu-latest
     steps:
+      - name: Check if run was cancelled
+        run: |
+          echo "🔍 Security Job - CI Run Information:"
+          echo "Workflow: ${{ github.workflow }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Run ID: ${{ github.run_id }}"
+          echo ""
+          echo "✅ Security job proceeding (previous runs cancelled if any)"
+      
       - name: 🔍 Checkout code
         uses: actions/checkout@v4
       
@@ -444,4 +472,3 @@ jobs:
                   console.log(`❌ Direct API call failed: ${apiResponse.status} - ${errorText}`);
                   throw new Error(`All trigger methods failed. Last error: ${apiResponse.status}`);
                 }
-            }
