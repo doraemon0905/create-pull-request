@@ -34,51 +34,18 @@ jobs:
           echo "🔍 SonarCloud Analysis Trigger Information"
           echo "=========================================="
           echo "Event: ${{ github.event_name }}"
-          echo "Branch: ${{ github.ref_name }}"
-          echo "Ref: ${{ github.ref }}"
-          echo "Workflow Run ID: ${{ github.run_id }}"
-          echo "Actor: ${{ github.actor }}"
-          echo ""
-          
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "📋 Workflow Dispatch Details:"
-            echo "  Triggered by: ${{ github.event.inputs.triggered_by }}"
-            echo "  CI Run ID: ${{ github.event.inputs.ci_run_id }}"
-            echo "  Inputs: ${{ toJson(github.event.inputs) }}"
+            echo "Triggered by: ${{ github.event.inputs.triggered_by }}"
+            echo "CI Run ID: ${{ github.event.inputs.ci_run_id }}"
           elif [ "${{ github.event_name }}" == "repository_dispatch" ]; then
-            echo "📋 Repository Dispatch Details:"
-            echo "  Event Type: ${{ github.event.action }}"
-            echo "  Triggered by: ${{ github.event.client_payload.triggered_by }}"
-            echo "  CI Run ID: ${{ github.event.client_payload.ci_run_id }}"
-            echo "  Ref: ${{ github.event.client_payload.ref }}"
-            echo "  Client Payload: ${{ toJson(github.event.client_payload) }}"
+            echo "Triggered by: Repository dispatch event"
+            echo "Event Type: ${{ github.event.action }}"
+            echo "Triggered by: ${{ github.event.client_payload.triggered_by }}"
+            echo "CI Run ID: ${{ github.event.client_payload.ci_run_id }}"
           elif [ "${{ github.event_name }}" == "workflow_run" ]; then
-            echo "📋 Workflow Run Details:"
-            echo "  CI Workflow: ${{ github.event.workflow_run.name }}"
-            echo "  CI Run ID: ${{ github.event.workflow_run.id }}"
-            echo "  CI Event: ${{ github.event.workflow_run.event }}"
-            echo "  CI Conclusion: ${{ github.event.workflow_run.conclusion }}"
-          fi
-          echo ""
-
-      - name: Verify trigger source
-        run: |
-          echo "🔍 Verifying trigger source and conditions..."
-          echo "Current branch: ${{ github.ref_name }}"
-          echo "Event name: ${{ github.event_name }}"
-          
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "✅ Triggered by workflow_dispatch from CI"
-            echo "   CI Run ID: ${{ github.event.inputs.ci_run_id }}"
-            echo "   Triggered by: ${{ github.event.inputs.triggered_by }}"
-          elif [ "${{ github.event_name }}" == "repository_dispatch" ]; then
-            echo "✅ Triggered by repository_dispatch from CI"
-            echo "   CI Run ID: ${{ github.event.client_payload.ci_run_id }}"
-            echo "   Triggered by: ${{ github.event.client_payload.triggered_by }}"
-          elif [ "${{ github.event_name }}" == "workflow_run" ]; then
-            echo "✅ Triggered by workflow_run completion"
-            echo "   CI Run ID: ${{ github.event.workflow_run.id }}"
-            echo "   CI Workflow: ${{ github.event.workflow_run.name }}"
+            echo "Triggered by: CI workflow completion"
+            echo "CI Workflow: ${{ github.event.workflow_run.name }}"
+            echo "CI Run ID: ${{ github.event.workflow_run.id }}"
           fi
           echo ""
 
@@ -143,8 +110,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: sonarcloud
     if: |
-      github.event_name == 'workflow_dispatch' || 
-      github.event_name == 'repository_dispatch' ||
+      (github.event_name == 'workflow_dispatch') || 
+      (github.event_name == 'repository_dispatch') ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request')
     
     steps:
