@@ -1,5 +1,4 @@
 import axios, { AxiosInstance } from 'axios';
-import chalk from 'chalk';
 import { JiraTicket } from './jira';
 import { GitChanges, FileChange } from './git';
 import { PullRequestTemplate } from './github';
