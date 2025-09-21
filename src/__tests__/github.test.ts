@@ -252,7 +252,7 @@ describe('GitHubService', () => {
       (githubService as any).git = mockGit;
 
       await expect(githubService.getCurrentBranch()).rejects.toThrow(
-        'Failed to get current branch: Git error'
+        'Git error'
       );
     });
   });

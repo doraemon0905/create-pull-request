@@ -41,28 +41,24 @@ export class GitHubService {
   }
 
   async getCurrentRepo(): Promise<GitHubRepo> {
-    try {
-      const remotes = await this.git.getRemotes(true);
-      const originRemote = remotes.find(remote => remote.name === CONFIG.DEFAULT_REMOTE);
+    const remotes = await this.git.getRemotes(true);
+    const originRemote = remotes.find(remote => remote.name === CONFIG.DEFAULT_REMOTE);
 
-      if (!originRemote?.refs?.push) {
-        throw new Error('No origin remote found');
-      }
-
-      const url = originRemote.refs.push;
-      const match = url.match(REGEX_PATTERNS.GITHUB_URL);
-
-      if (!match) {
-        throw new Error('Unable to parse GitHub repository from remote URL');
-      }
-
-      return {
-        owner: match[1],
-        repo: match[2]
-      };
-    } catch (error) {
-      throw new Error(`Failed to get repository info: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    if (!originRemote?.refs?.push) {
+      throw new Error('No origin remote found');
     }
+
+    const url = originRemote.refs.push;
+    const match = url.match(REGEX_PATTERNS.GITHUB_URL);
+
+    if (!match) {
+      throw new Error('Unable to parse GitHub repository from remote URL');
+    }
+
+    return {
+      owner: match[1],
+      repo: match[2]
+    };
   }
 
   async getPullRequestTemplates(repo: GitHubRepo): Promise<PullRequestTemplate[]> {
@@ -245,12 +241,8 @@ export class GitHubService {
   }
 
   async getCurrentBranch(): Promise<string> {
-    try {
-      const branch = await this.git.branch();
-      return branch.current;
-    } catch (error) {
-      throw new Error(`Failed to get current branch: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    const branch = await this.git.branch();
+    return branch.current;
   }
 
   async validateConnection(): Promise<boolean> {
