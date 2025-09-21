@@ -443,9 +443,11 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const ref = context.ref;
+            const branchName = context.ref.replace('refs/heads/', '').replace('refs/pull/', '').replace('/merge', '');
             
-            console.log(`🚀 Triggering SonarCloud analysis for ${owner}/${repo}@${ref}`);
+            console.log(`🚀 Triggering SonarCloud analysis for ${owner}/${repo}@${branchName}`);
             console.log(`📊 All CI jobs completed successfully, including report job`);
+            console.log(`🔍 Original ref: ${ref}, Branch name: ${branchName}`);
             
              // Method 3: Direct API call using fetch (similar to curl command)
                 console.log('🔍 Attempting direct API call to workflow file...');
@@ -458,7 +460,7 @@ jobs:
                     'X-GitHub-Api-Version': '2022-11-28'
                   },
                   body: JSON.stringify({
-                    ref: ref,
+                    ref: branchName,
                     inputs: {
                       triggered_by: 'ci-pipeline',
                       ci_run_id: context.runId
