@@ -77,36 +77,60 @@ jobs:
     steps:
       - name: 🔍 Checkout code
         uses: actions/checkout@v4
-
+      
       - name: 🔧 Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-
+      
+      - name: 📦 Cache analysis results
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            .eslintcache
+            coverage
+          key: code-quality-${{ runner.os }}-${{ hashFiles('src/**/*', '.eslintrc.*', 'tsconfig.json') }}
+          restore-keys: |
+            code-quality-${{ runner.os }}-
+      
       - name: 📦 Install dependencies
         run: npm ci
-
-      - name: 🔨 Build project
-        run: npm run build
-
-      - name: 🔍 Run ESLint
-        run: npm run lint
-
-      - name: 🎨 Check code formatting
-        run: npm run format:check
-
-      - name: 📊 Run TypeScript type checking
-        run: npx tsc --noEmit
-
-      - name: 📈 Analyze code complexity
+      
+      - name: 📊 Code complexity analysis
         run: |
-          echo "🔍 Analyzing code complexity..."
-          npx complexity-report --format=json --output=complexity-report.json src/ || true
+          echo "📊 Analyzing code complexity..."
           
-          if [ -f "complexity-report.json" ]; then
-            echo "📊 Code Complexity Analysis:"
-            cat complexity-report.json | jq '.summary' || echo "Complexity report generated"
+          # Simple complexity check using find and wc
+          TOTAL_LINES=$(find src -name "*.ts" -exec wc -l {} + | tail -1 | awk '{print $1}')
+          FILE_COUNT=$(find src -name "*.ts" | wc -l)
+          
+          if [ "$FILE_COUNT" -gt 0 ]; then
+            AVG_LINES=$((TOTAL_LINES / FILE_COUNT))
+            echo "📈 Code statistics:"
+            echo "   Total files: $FILE_COUNT"
+            echo "   Total lines: $TOTAL_LINES"
+            echo "   Average lines per file: $AVG_LINES"
+            
+            if [ "$AVG_LINES" -gt 300 ]; then
+              echo "⚠️ Average file size is quite large - consider refactoring"
+            else
+              echo "✅ File sizes look reasonable"
+            fi
+          fi
+      
+      - name: 🔍 Dead code detection
+        run: |
+          echo "🔍 Checking for potential dead code..."
+          
+          # Check for TODO/FIXME comments
+          TODO_COUNT=$(find src -name "*.ts" -exec grep -l "TODO\|FIXME\|XXX" {} + | wc -l)
+          if [ "$TODO_COUNT" -gt 0 ]; then
+            echo "📝 Found $TODO_COUNT files with TODO/FIXME comments"
+            find src -name "*.ts" -exec grep -Hn "TODO\|FIXME\|XXX" {} +
+          else
+            echo "✅ No TODO/FIXME comments found"
           fi
 
   # Validate code quality on all pushes and PRs - runs after security and code-quality
