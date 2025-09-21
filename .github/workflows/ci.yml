@@ -447,13 +447,14 @@ jobs:
             console.log(`🚀 Triggering SonarCloud analysis for ${owner}/${repo}@${ref}`);
             console.log(`📊 All CI jobs completed successfully, including report job`);
             
-            // Method 3: Direct API call using fetch
-                const apiResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/SonarCloud%20Analysis/dispatches`, {
+             // Method 3: Direct API call using fetch (similar to curl command)
+                console.log('🔍 Attempting direct API call to workflow file...');
+                const apiResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/sonarcloud.yml/dispatches`, {
                   method: 'POST',
                   headers: {
-                    'Accept': 'application/vnd.github.v3+json',
+                    'Accept': 'application/vnd.github+json',
                     'Authorization': `Bearer ${github.token}`,
-                    'Content-Type': 'application/json'
+                    'X-GitHub-Api-Version': '2022-11-28'
                   },
                   body: JSON.stringify({
                     ref: ref,
