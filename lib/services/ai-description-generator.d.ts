@@ -18,7 +18,7 @@ export interface GeneratedPRContent {
     body: string;
     summary?: string;
 }
-export type AIProvider = 'chatgpt' | 'gemini' | 'copilot';
+export type AIProvider = 'claude' | 'chatgpt' | 'gemini' | 'copilot';
 export interface AIConfig {
     provider: AIProvider;
     apiKey: string;
@@ -35,6 +35,7 @@ export declare class AIDescriptionGeneratorService {
     private generateSummary;
     private buildPrompt;
     private callAIAPI;
+    private callClaudeAPI;
     private callChatGPTAPI;
     private callGeminiAPI;
     private callCopilotAPI;

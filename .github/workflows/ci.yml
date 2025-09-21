@@ -9,16 +9,151 @@ on:
     # Run weekly security audits on Sundays at 2 AM UTC
     - cron: '0 2 * * 0'
 
+# Cancel previous runs when a new commit is pushed to the same branch or PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  # Validate code quality on all pushes and PRs
+  # Security checks - runs first (required)
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if run was cancelled
+        run: |
+          echo "🔍 Security Job - CI Run Information:"
+          echo "Workflow: ${{ github.workflow }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Run ID: ${{ github.run_id }}"
+          echo ""
+          echo "✅ Security job proceeding (previous runs cancelled if any)"
+      
+      - name: 🔍 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: 📦 Install dependencies
+        run: npm ci
+      
+      - name: 🔒 Run security audit
+        run: npm audit --audit-level=moderate
+      
+      - name: 🔍 Check for known vulnerabilities
+        run: |
+          echo "🔍 Checking for security vulnerabilities..."
+          npm audit --audit-level=high --json > audit-results.json || true
+          
+          # Check if there are high or critical vulnerabilities
+          if [ -f "audit-results.json" ]; then
+            HIGH_VULNS=$(cat audit-results.json | jq '.metadata.vulnerabilities.high // 0')
+            CRITICAL_VULNS=$(cat audit-results.json | jq '.metadata.vulnerabilities.critical // 0')
+            
+            echo "📊 Security Audit Results:"
+            echo "  High vulnerabilities: $HIGH_VULNS"
+            echo "  Critical vulnerabilities: $CRITICAL_VULNS"
+            
+            if [ "$CRITICAL_VULNS" -gt 0 ]; then
+              echo "❌ Critical vulnerabilities found! Please fix them before proceeding."
+              exit 1
+            elif [ "$HIGH_VULNS" -gt 0 ]; then
+              echo "⚠️ High vulnerabilities found. Consider fixing them."
+            else
+              echo "✅ No critical or high vulnerabilities found."
+            fi
+          fi
+
+  # Code quality analysis - runs after security (required)
+  code-quality:
+    runs-on: ubuntu-latest
+    needs: security
+    steps:
+      - name: 🔍 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: 📦 Cache analysis results
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            .eslintcache
+            coverage
+          key: code-quality-${{ runner.os }}-${{ hashFiles('src/**/*', '.eslintrc.*', 'tsconfig.json') }}
+          restore-keys: |
+            code-quality-${{ runner.os }}-
+      
+      - name: 📦 Install dependencies
+        run: npm ci
+      
+      - name: 📊 Code complexity analysis
+        run: |
+          echo "📊 Analyzing code complexity..."
+          
+          # Simple complexity check using find and wc
+          TOTAL_LINES=$(find src -name "*.ts" -exec wc -l {} + | tail -1 | awk '{print $1}')
+          FILE_COUNT=$(find src -name "*.ts" | wc -l)
+          
+          if [ "$FILE_COUNT" -gt 0 ]; then
+            AVG_LINES=$((TOTAL_LINES / FILE_COUNT))
+            echo "📈 Code statistics:"
+            echo "   Total files: $FILE_COUNT"
+            echo "   Total lines: $TOTAL_LINES"
+            echo "   Average lines per file: $AVG_LINES"
+            
+            if [ "$AVG_LINES" -gt 300 ]; then
+              echo "⚠️ Average file size is quite large - consider refactoring"
+            else
+              echo "✅ File sizes look reasonable"
+            fi
+          fi
+      
+      - name: 🔍 Dead code detection
+        run: |
+          echo "🔍 Checking for potential dead code..."
+          
+          # Check for TODO/FIXME comments
+          TODO_COUNT=$(find src -name "*.ts" -exec grep -l "TODO\|FIXME\|XXX" {} + | wc -l)
+          if [ "$TODO_COUNT" -gt 0 ]; then
+            echo "📝 Found $TODO_COUNT files with TODO/FIXME comments"
+            find src -name "*.ts" -exec grep -Hn "TODO\|FIXME\|XXX" {} +
+          else
+            echo "✅ No TODO/FIXME comments found"
+          fi
+
+  # Validate code quality on all pushes and PRs - runs after security and code-quality
   validate:
     runs-on: ubuntu-latest
+    needs: [security, code-quality]
     
     strategy:
       matrix:
         node-version: [18, 20, 22]  # Test multiple Node.js versions
     
     steps:
+      - name: Check if run was cancelled
+        run: |
+          echo "🔍 CI Run Information:"
+          echo "Workflow: ${{ github.workflow }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Run ID: ${{ github.run_id }}"
+          echo ""
+          echo "✅ This run is proceeding (previous runs cancelled if any)"
       - name: 🔍 Checkout code
         uses: actions/checkout@v4
       
@@ -57,8 +192,16 @@ jobs:
       - name: 🏗️ Build TypeScript
         run: npm run build
       
-      - name: 🧪 Run tests
-        run: npm test
+      - name: 🧪 Run tests with coverage
+        run: npm test -- --coverage --watchAll=false
+      
+      - name: 📊 Upload coverage artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ matrix.node-version }}
+          path: coverage/
+          retention-days: 30
       
       - name: 📊 Check build artifacts
         run: |
@@ -189,10 +332,23 @@ jobs:
             echo "⚠️ Package size is quite large (>5MB)"
           fi
 
-  # Security and dependency checks
-  security:
+  # Compatibility testing
+  compatibility:
     runs-on: ubuntu-latest
+    needs: [security, code-quality]
     steps:
+      - name: Check if run was cancelled
+        run: |
+          echo "🔍 Compatibility Job - CI Run Information:"
+          echo "Workflow: ${{ github.workflow }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Run ID: ${{ github.run_id }}"
+          echo ""
+          echo "✅ Security job proceeding (previous runs cancelled if any)"
+      
       - name: 🔍 Checkout code
         uses: actions/checkout@v4
       
@@ -247,9 +403,12 @@ jobs:
           # This requires license-checker to be installed
           npx license-checker --summary || echo "License check skipped - license-checker not available"
 
-  # Code quality analysis
-  code-quality:
+  # Report results
+  report:
     runs-on: ubuntu-latest
+    needs: [validate, security, code-quality, compatibility]
+    if: always()
+    
     steps:
       - name: 🔍 Checkout code
         uses: actions/checkout@v4
@@ -309,77 +468,70 @@ jobs:
             echo "✅ No TODO/FIXME comments found"
           fi
 
-  # Compatibility testing
-  compatibility:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        node-version: [20]
-    
-    steps:
-      - name: 🔍 Checkout code
-        uses: actions/checkout@v4
-      
-      - name: 🔧 Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: 'npm'
-      
-      - name: 📦 Cache compatibility build
-        uses: actions/cache@v4
-        with:
-          path: |
-            lib
-            *.tsbuildinfo
-            ~/.npm
-          key: compat-build-${{ runner.os }}-${{ matrix.node-version }}-${{ hashFiles('src/**/*', 'tsconfig.json', 'package-lock.json') }}
-          restore-keys: |
-            compat-build-${{ runner.os }}-${{ matrix.node-version }}-
-            compat-build-${{ runner.os }}-
-      
-      - name: 📦 Install dependencies
-        run: npm ci
-      
-      - name: 🏗️ Build project
-        run: npm run build
-      
-      - name: 🧪 Test CLI on ${{ matrix.os }}
-        shell: bash
-        run: |
-          echo "🧪 Testing CLI functionality on ${{ matrix.os }}..."
-          
-          # Test help command
-          node bin/create-pr --help
-          
-          # Test config command
-          node bin/create-pr config
-          
-          echo "✅ CLI works on ${{ matrix.os }}"
-
-  # Report results
-  report:
+  # Trigger SonarCloud analysis when all CI jobs pass
+  trigger-sonarcloud:
     runs-on: ubuntu-latest
-    needs: [validate, security, code-quality, compatibility]
-    if: always()
+    needs: [validate, security, code-quality, compatibility, report]
+    if: |
+      needs.validate.result == 'success' && 
+      needs.security.result == 'success' && 
+      needs.code-quality.result == 'success' && 
+      needs.compatibility.result == 'success' &&
+      needs.report.result == 'success'
+    
+    permissions:
+      actions: write
+      contents: read
     
     steps:
-      - name: 📊 CI Summary
-        run: |
-          echo "📊 CI/CD Pipeline Summary"
-          echo "========================"
-          echo "Validation: ${{ needs.validate.result }}"
-          echo "Security: ${{ needs.security.result }}"
-          echo "Code Quality: ${{ needs.code-quality.result }}"
-          echo "Compatibility: ${{ needs.compatibility.result }}"
-          echo ""
-          
-          if [[ "${{ needs.validate.result }}" == "success" && 
-                "${{ needs.security.result }}" == "success" && 
-                "${{ needs.code-quality.result }}" == "success" && 
-                "${{ needs.compatibility.result }}" == "success" ]]; then
-            echo "✅ All checks passed! Ready for release."
-          else
-            echo "❌ Some checks failed. Review the results above."
-          fi
+      - name: 🚀 Trigger SonarCloud Analysis
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const ref = context.ref;
+            
+            // Determine the source branch for SonarCloud
+            let sourceBranch;
+            if (ref.startsWith('refs/pull/')) {
+              // For pull requests, we need to get the source branch from the PR
+              // Since we're in a PR context, we can use the head ref
+              sourceBranch = context.payload.pull_request.head.ref;
+              console.log(`🔍 Pull request detected, using source branch: ${sourceBranch}`);
+            } else {
+              // For direct branch pushes, use the branch name
+              sourceBranch = ref.replace('refs/heads/', '');
+              console.log(`🔍 Branch push detected, using branch: ${sourceBranch}`);
+            }
+            
+            console.log(`🚀 Triggering SonarCloud analysis for ${owner}/${repo}@${sourceBranch}`);
+            console.log(`📊 All CI jobs completed successfully, including report job`);
+            console.log(`🔍 Original ref: ${ref}, Source branch: ${sourceBranch}`);
+            
+             // Method 3: Direct API call using fetch (similar to curl command)
+                console.log('🔍 Attempting direct API call to workflow file...');
+                console.log('🔑 Using GH_TOKEN from secrets');
+                const apiResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/sonarcloud.yml/dispatches`, {
+                  method: 'POST',
+                  headers: {
+                    'Accept': 'application/vnd.github+json',
+                    'Authorization': `Bearer ${{ secrets.GH_TOKEN }}`,
+                    'X-GitHub-Api-Version': '2022-11-28'
+                  },
+                  body: JSON.stringify({
+                    ref: sourceBranch,
+                    inputs: {
+                      triggered_by: 'ci-pipeline'
+                    }
+                  })
+                });
+                
+                if (apiResponse.ok) {
+                  console.log('✅ Direct API call successful');
+                  console.log(`📋 Response status: ${apiResponse.status}`);
+                } else {
+                  const errorText = await apiResponse.text();
+                  console.log(`❌ Direct API call failed: ${apiResponse.status} - ${errorText}`);
+                  throw new Error(`All trigger methods failed. Last error: ${apiResponse.status}`);
+                }

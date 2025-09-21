@@ -41,7 +41,7 @@ export class GitService {
 
       // Get diff stats between base and current branch
       const diffSummary = await this.git.diffSummary([`${baseBranch}...HEAD`]);
-      
+
       // Get commit messages
       const log = await this.git.log({ from: baseBranch, to: 'HEAD' });
       const commits = log.all.map(commit => commit.message);
@@ -64,7 +64,6 @@ export class GitService {
               baseFileChange.lineNumbers = this.extractLineNumbers(fileDiff);
             } catch (error) {
               // If we can't get diff for a specific file, continue without it
-              console.warn(`Could not get diff for file ${file.file}:`, error);
             }
           }
 
@@ -87,13 +86,13 @@ export class GitService {
   async getDiffContent(baseBranch: string = CONFIG.DEFAULT_BRANCH, maxLines: number = LIMITS.DEFAULT_MAX_DIFF_LINES): Promise<string> {
     try {
       const diff = await this.git.diff([`${baseBranch}...HEAD`]);
-      
+
       // Limit diff content to prevent overwhelming the AI
       const lines = diff.split('\n');
       if (lines.length > maxLines) {
         return lines.slice(0, maxLines).join('\n') + '\n\n... (diff truncated for brevity)';
       }
-      
+
       return diff;
     } catch (error) {
       throw new Error(`Failed to get diff content: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -132,8 +131,8 @@ export class GitService {
   async branchExists(branchName: string): Promise<boolean> {
     try {
       const branches = await this.git.branch(['-a']);
-      return branches.all.some(branch => 
-        branch === branchName || 
+      return branches.all.some(branch =>
+        branch === branchName ||
         branch === `remotes/origin/${branchName}` ||
         branch.endsWith(`/${branchName}`)
       );
@@ -145,27 +144,27 @@ export class GitService {
   private mapGitStatus(file: any): 'added' | 'modified' | 'deleted' | 'renamed' {
     // Handle binary files
     if ('binary' in file && file.binary) return 'modified';
-    
+
     // Check for renames first
     if (file.file && file.file.includes(' => ')) return 'renamed';
-    
+
     // Check insertions/deletions if they exist
     if ('insertions' in file && 'deletions' in file) {
       if (file.insertions > 0 && file.deletions === 0) return 'added';
       if (file.insertions === 0 && file.deletions > 0) return 'deleted';
     }
-    
+
     return 'modified';
   }
 
   private extractLineNumbers(diffContent: string): { added: number[]; removed: number[] } {
     const added: number[] = [];
     const removed: number[] = [];
-    
+
     const lines = diffContent.split('\n');
     let currentNewLine = 0;
     let currentOldLine = 0;
-    
+
     for (const line of lines) {
       // Parse hunk headers (e.g., @@ -1,4 +1,6 @@)
       const hunkMatch = line.match(/^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/);
@@ -174,15 +173,15 @@ export class GitService {
         currentNewLine = parseInt(hunkMatch[2], LIMITS.HUNK_HEADER_OFFSET) - 1;
         continue;
       }
-      
+
       // Skip lines that don't represent content changes
-      if (line.startsWith('diff --git') || 
-          line.startsWith('index ') || 
-          line.startsWith('+++') || 
-          line.startsWith('---')) {
+      if (line.startsWith('diff --git') ||
+        line.startsWith('index ') ||
+        line.startsWith('+++') ||
+        line.startsWith('---')) {
         continue;
       }
-      
+
       // Handle content lines
       if (line.startsWith('+') && !line.startsWith('+++')) {
         currentNewLine++;
@@ -196,7 +195,7 @@ export class GitService {
         currentOldLine++;
       }
     }
-    
+
     return { added, removed };
   }
 

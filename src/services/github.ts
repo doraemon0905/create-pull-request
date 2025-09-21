@@ -44,14 +44,14 @@ export class GitHubService {
     try {
       const remotes = await this.git.getRemotes(true);
       const originRemote = remotes.find(remote => remote.name === CONFIG.DEFAULT_REMOTE);
-      
+
       if (!originRemote?.refs?.push) {
         throw new Error('No origin remote found');
       }
 
       const url = originRemote.refs.push;
       const match = url.match(REGEX_PATTERNS.GITHUB_URL);
-      
+
       if (!match) {
         throw new Error('Unable to parse GitHub repository from remote URL');
       }
@@ -76,7 +76,7 @@ export class GitHubService {
           repo: repo.repo,
           path: path
         });
-        
+
         if ('content' in response.data && response.data.type === 'file') {
           const content = Buffer.from(response.data.content, 'base64').toString('utf-8');
           templates.push({
@@ -96,7 +96,7 @@ export class GitHubService {
         repo: repo.repo,
         path: '.github/PULL_REQUEST_TEMPLATE'
       });
-      
+
       if (Array.isArray(response.data)) {
         for (const file of response.data) {
           if (file.type === 'file' && file.name.endsWith('.md')) {
@@ -105,7 +105,7 @@ export class GitHubService {
               repo: repo.repo,
               path: file.path
             });
-            
+
             if ('content' in fileResponse.data && fileResponse.data.type === 'file') {
               const content = Buffer.from(fileResponse.data.content, 'base64').toString('utf-8');
               templates.push({
@@ -131,10 +131,9 @@ export class GitHubService {
         head: `${repo.owner}:${branch}`,
         state: 'open'
       });
-      
+
       return response.data.length > 0 ? response.data[0] : null;
     } catch (error) {
-      console.warn('Failed to check for existing pull request:', error);
       return null;
     }
   }
@@ -166,7 +165,7 @@ export class GitHubService {
   async createOrUpdatePullRequest(repo: GitHubRepo, pullRequest: PullRequest): Promise<{ data: any; isUpdate: boolean }> {
     // First, check if a pull request already exists for this branch
     const existingPR = await this.findExistingPullRequest(repo, pullRequest.head);
-    
+
     if (existingPR) {
       // Update the existing pull request
       const updatedPR = await this.updatePullRequest(repo, existingPR.number, {
@@ -186,7 +185,7 @@ export class GitHubService {
   async createPullRequest(repo: GitHubRepo, pullRequest: PullRequest): Promise<any> {
     // Validate required fields before making the API call
     this.validatePullRequestData(pullRequest);
-    
+
     const prData = {
       owner: repo.owner,
       repo: repo.repo,
@@ -196,19 +195,19 @@ export class GitHubService {
       base: pullRequest.base,
       draft: pullRequest.draft
     };
-    
-    console.log('Creating PR with data:', prData);
-    
+
     try {
       const response = await this.octokit.rest.pulls.create(prData);
       return response.data;
     } catch (error: any) {
-      console.error('GitHub API Error Details:', {
-        status: error.status,
-        message: error.message,
-        response: error.response?.data
-      });
-      throw new Error(`GitHub API error: ${error.message}`);
+      // Handle specific error cases
+      if (error.status === 401) {
+        throw new Error('Authentication failed. Please check your GitHub token.');
+      } else if (error.status === 403) {
+        throw new Error('Access denied. Please check your GitHub token permissions.');
+      } else {
+        throw new Error(`GitHub API error: ${error.message}`);
+      }
     }
   }
 
@@ -239,16 +238,6 @@ export class GitHubService {
     if (pullRequest.head === pullRequest.base) {
       errors.push('Head branch cannot be the same as base branch');
     }
-
-    // Debug: Log what we're validating
-    console.log('Validating PR data:', {
-      title: pullRequest.title?.substring(0, 50) + '...',
-      titleLength: pullRequest.title?.length,
-      head: pullRequest.head,
-      base: pullRequest.base,
-      bodyLength: pullRequest.body?.length,
-      body: pullRequest.body
-    });
 
     if (errors.length > 0) {
       throw new Error(`Pull request validation failed:\n${errors.map(e => `- ${e}`).join('\n')}`);

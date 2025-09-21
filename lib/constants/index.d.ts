@@ -1,10 +1,12 @@
 export declare const API_URLS: {
+    readonly CLAUDE_BASE_URL: "https://api.anthropic.com";
     readonly OPENAI_BASE_URL: "https://api.openai.com/v1";
     readonly GEMINI_BASE_URL: "https://generativelanguage.googleapis.com/v1beta";
     readonly COPILOT_BASE_URL: "https://api.githubcopilot.com";
     readonly JIRA_API_VERSION: "/rest/api/3";
 };
 export declare const DEFAULT_MODELS: {
+    readonly CLAUDE: "claude-3-5-sonnet-20241022";
     readonly OPENAI: "gpt-4o";
     readonly GEMINI: "gemini-1.5-pro";
     readonly COPILOT: "gpt-4o";
@@ -29,11 +31,11 @@ export declare const HTTP_STATUS: {
 export declare const CONFIG: {
     readonly DIRECTORY_NAME: ".create-pr";
     readonly FILE_NAME: "env-config.json";
-    readonly VERSION: "1.1.0";
+    readonly VERSION: string;
     readonly DEFAULT_BRANCH: "main";
     readonly DEFAULT_REMOTE: "origin";
     readonly CLI_NAME: "create-pr";
-    readonly CLI_VERSION: "1.0.0";
+    readonly CLI_VERSION: string;
 };
 export declare const FILE_PATHS: {
     readonly PR_TEMPLATE_PATHS: readonly [".github/pull_request_template.md", ".github/PULL_REQUEST_TEMPLATE.md", "pull_request_template.md", "PULL_REQUEST_TEMPLATE.md", ".github/PULL_REQUEST_TEMPLATE/default.md"];

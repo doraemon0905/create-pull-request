@@ -1,0 +1,129 @@
+name: SonarCloud Analysis
+
+on:
+  workflow_run:
+    workflows: ["🔍 CI/CD Pipeline"]
+    types: [completed]
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      triggered_by:
+        description: 'Who triggered this workflow'
+        required: false
+        default: 'manual'
+        type: string
+      ci_run_id:
+        description: 'CI run ID that triggered this workflow'
+        required: false
+        type: string
+  repository_dispatch:
+    types: [sonarcloud-trigger]
+
+jobs:
+  sonarcloud:
+    name: SonarCloud Analysis
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' || 
+      github.event_name == 'repository_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    
+    steps:
+      - name: Show trigger information
+        run: |
+          echo "🔍 SonarCloud Analysis Trigger Information"
+          echo "=========================================="
+          echo "Event: ${{ github.event_name }}"
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "Triggered by: ${{ github.event.inputs.triggered_by }}"
+          elif [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+            echo "Triggered by: Repository dispatch event"
+            echo "Event Type: ${{ github.event.action }}"
+            echo "Triggered by: ${{ github.event.client_payload.triggered_by }}"
+          elif [ "${{ github.event_name }}" == "workflow_run" ]; then
+            echo "Triggered by: CI workflow completion"
+            echo "CI Workflow: ${{ github.event.workflow_run.name }}"
+          fi
+          echo ""
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Full git history is needed to get a proper list of changed files for SonarCloud
+          fetch-depth: 0
+
+      - name: Download coverage artifacts from CI
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report-20
+          path: coverage/
+          github-token: ${{ secrets.GH_TOKEN }}
+        continue-on-error: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Generate coverage if artifact not found
+        run: |
+          if [ ! -f "coverage/lcov.info" ]; then
+            echo "⚠️ Coverage artifact not found, generating coverage locally..."
+            npm test -- --coverage --watchAll=false
+            echo "✅ Coverage generated locally"
+          else
+            echo "✅ Using coverage from CI artifact"
+          fi
+
+      - name: Verify coverage file exists
+        run: |
+          if [ -f "coverage/lcov.info" ]; then
+            echo "✅ Coverage file found: coverage/lcov.info"
+            echo "Coverage file size: $(wc -l < coverage/lcov.info) lines"
+          else
+            echo "❌ Coverage file not found: coverage/lcov.info"
+            echo "Available files in coverage directory:"
+            ls -la coverage/ || echo "Coverage directory does not exist"
+            exit 1
+          fi
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}  # Needed to get PR information, if any
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          # Additional arguments for the sonarcloud scanner
+          args: >
+            -Dsonar.projectKey=create-pull-request
+            -Dsonar.organization=doraemon0905
+            -Dsonar.sources=src
+            -Dsonar.tests=src/__tests__
+            -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts
+            -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+            -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/node_modules/**,**/lib/**,**/scripts/**
+            -Dsonar.exclusions=node_modules/**,lib/**,coverage/**,scripts/**,**/*.d.ts
+            -Dsonar.cpd.exclusions=**/*.test.ts,**/*.spec.ts
+
+  quality-gate:
+    name: Quality Gate Check
+    runs-on: ubuntu-latest
+    needs: sonarcloud
+    if: |
+      (github.event_name == 'workflow_dispatch') || 
+      (github.event_name == 'repository_dispatch') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request')
+    
+    steps:
+      - name: Quality Gate Status
+        run: |
+          echo "SonarCloud analysis completed."
+          echo "Please check the quality gate status at https://sonarcloud.io/project/overview?id=create-pull-request"

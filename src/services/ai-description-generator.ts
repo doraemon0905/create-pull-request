@@ -1,5 +1,4 @@
 import axios, { AxiosInstance } from 'axios';
-import chalk from 'chalk';
 import { JiraTicket } from './jira';
 import { GitChanges, FileChange } from './git';
 import { PullRequestTemplate } from './github';
@@ -26,7 +25,7 @@ export interface GeneratedPRContent {
   summary?: string;
 }
 
-export type AIProvider = 'chatgpt' | 'gemini' | 'copilot';
+export type AIProvider = 'claude' | 'chatgpt' | 'gemini' | 'copilot';
 
 export interface AIConfig {
   provider: AIProvider;
@@ -53,6 +52,22 @@ export class AIDescriptionGeneratorService {
     } catch {
       // Fallback to environment variables if config doesn't exist
       aiProvidersConfig = null;
+    }
+
+    // Claude client (primary AI provider)
+    const claudeKey = aiProvidersConfig?.claude?.apiKey ||
+      process.env.ANTHROPIC_API_KEY ||
+      process.env.CLAUDE_API_KEY;
+    if (claudeKey) {
+      this.clients.set('claude', axios.create({
+        baseURL: API_URLS.CLAUDE_BASE_URL,
+        headers: {
+          'Authorization': `Bearer ${claudeKey}`,
+          'Content-Type': HEADERS.JSON_CONTENT_TYPE,
+          'anthropic-version': '2023-06-01'
+        },
+        timeout: LIMITS.API_TIMEOUT_MS
+      }));
     }
 
     // ChatGPT client
@@ -118,8 +133,6 @@ export class AIDescriptionGeneratorService {
         summary
       };
     } catch (error) {
-      console.error(error);
-      console.warn(`${this.selectedProvider || 'AI'} API unavailable, trying fallback providers...`);
       return this.tryFallbackProviders(options);
     }
   }
@@ -128,22 +141,20 @@ export class AIDescriptionGeneratorService {
     const availableProviders = Array.from(this.clients.keys());
 
     if (availableProviders.length === 0) {
-      throw new Error('No AI providers configured. Please set OPENAI_API_KEY, GEMINI_API_KEY, or configure GitHub Copilot.');
+      throw new Error('No AI providers configured. Please set ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, or configure GitHub Copilot.');
     }
 
     // If only one provider available, use it
     if (availableProviders.length === 1) {
       const provider = availableProviders[0];
-      console.log(`Using ${provider.toUpperCase()} as AI provider`);
       return provider;
     }
 
-    // Prioritize ChatGPT, then Gemini, then Copilot
-    const preferredOrder: AIProvider[] = ['chatgpt', 'gemini', 'copilot'];
+    // Prioritize Claude first, then ChatGPT, then Gemini, then Copilot
+    const preferredOrder: AIProvider[] = ['claude', 'chatgpt', 'gemini', 'copilot'];
     for (const preferred of preferredOrder) {
       if (availableProviders.includes(preferred)) {
         const provider = preferred;
-        console.log(`Using ${provider.toUpperCase()} as primary AI provider`);
         return provider;
       }
     }
@@ -158,7 +169,7 @@ export class AIDescriptionGeneratorService {
           name: provider.toUpperCase(),
           value: provider
         })),
-        default: availableProviders.includes('chatgpt') ? 'chatgpt' : availableProviders[0]
+        default: availableProviders.includes('claude') ? 'claude' : availableProviders.includes('chatgpt') ? 'chatgpt' : availableProviders[0]
       }
     ]);
 
@@ -166,7 +177,7 @@ export class AIDescriptionGeneratorService {
   }
 
   private async tryFallbackProviders(options: GenerateDescriptionOptions): Promise<GeneratedPRContent> {
-    const providers: AIProvider[] = ['chatgpt', 'gemini', 'copilot'];
+    const providers: AIProvider[] = ['claude', 'chatgpt', 'gemini', 'copilot'];
     const availableProviders = providers.filter(p => this.clients.has(p));
 
     // Remove the already tried provider
@@ -174,27 +185,23 @@ export class AIDescriptionGeneratorService {
 
     for (const provider of remainingProviders) {
       try {
-        console.log(`Trying fallback provider: ${provider.toUpperCase()}`);
         const summary = await this.generateSummary(options, provider);
         const prompt = this.buildPrompt(options, summary);
         const response = await this.callAIAPI(prompt, provider);
         const result = this.parseAIResponse(response, provider);
 
-        console.log(`Successfully used fallback provider: ${provider.toUpperCase()}`);
         this.selectedProvider = provider;
         return { ...result, summary };
       } catch (error) {
-        console.warn(`${provider.toUpperCase()} also failed:`, error);
         continue;
       }
     }
 
-    console.warn('All AI providers failed, falling back to template-based generation');
     return this.generateFallbackDescription(options);
   }
 
   private async generateSummary(options: GenerateDescriptionOptions, provider?: AIProvider): Promise<string> {
-    const targetProvider = provider || this.selectedProvider || 'chatgpt';
+    const targetProvider = provider || this.selectedProvider || 'claude';
     const { jiraTicket, gitChanges, diffContent, template, repoInfo } = options;
 
     let summaryPrompt = `Generate a detailed summary of this pull request with file links and explanations based on the following information:\n\n`;
@@ -230,16 +237,15 @@ export class AIDescriptionGeneratorService {
 
       // Add GitHub file URL if repository info is available
       if (repoInfo) {
-        const fileUrl = `https://github.com/${repoInfo.owner}/${repoInfo.repo}/blob/${repoInfo.currentBranch}/${file.file}`;
+        const fileUrl = this.generateFileUrl(repoInfo, file.file);
         summaryPrompt += `- GitHub URL: ${fileUrl}\n`;
 
         // Add specific line URLs for key changes
         if (file.lineNumbers?.added.length && file.lineNumbers.added.length > 0) {
           const keyLines = file.lineNumbers.added.slice(0, 3);
-          if (keyLines.length === 1) {
-            summaryPrompt += `- Key change at line: ${fileUrl}#L${keyLines[0]}\n`;
-          } else if (keyLines.length > 1) {
-            summaryPrompt += `- Key changes at lines: ${keyLines.map(line => `${fileUrl}#L${line}`).join(', ')}\n`;
+          if (keyLines.length > 0) {
+            const lineLinks = this.generateLineLinks(repoInfo, file.file, keyLines);
+            summaryPrompt += `- Key changes at lines: ${lineLinks}\n`;
           }
         }
       }
@@ -259,7 +265,7 @@ export class AIDescriptionGeneratorService {
           ? file.diffContent.substring(0, LIMITS.MAX_DIFF_CONTENT_LENGTH * 2) + '\n... (diff truncated for brevity)'
           : file.diffContent;
         summaryPrompt += `- Full code diff:\n\`\`\`diff\n${truncatedDiff}\n\`\`\`\n`;
-        
+
         // Extract key changes from the diff for better AI understanding
         const diffSummary = this.extractDiffSummary(file.diffContent);
         if (diffSummary.length > 0) {
@@ -272,13 +278,13 @@ export class AIDescriptionGeneratorService {
 
     if (diffContent) {
       summaryPrompt += `\n## Overall Code Changes:\n`;
-      
+
       // Provide the full diff with length limits
       const truncatedOverallDiff = diffContent.length > LIMITS.MAX_OVERALL_DIFF_LENGTH
         ? diffContent.substring(0, LIMITS.MAX_OVERALL_DIFF_LENGTH) + '\n... (overall diff truncated for brevity)'
         : diffContent;
       summaryPrompt += `\`\`\`diff\n${truncatedOverallDiff}\n\`\`\`\n`;
-      
+
       // Extract and provide high-level diff insights
       const overallDiffSummary = this.extractDiffSummary(diffContent);
       if (overallDiffSummary.length > 0) {
@@ -368,50 +374,31 @@ export class AIDescriptionGeneratorService {
     }
 
     try {
-      console.log(chalk.gray('\n🔍 Debug - Summary Generation:'));
-      console.log(chalk.gray(`Provider: ${targetProvider}`));
-      console.log(chalk.gray(`Prompt length: ${summaryPrompt.length} characters`));
-
       const response = await this.callAIAPI(summaryPrompt, targetProvider);
       let content = this.extractContentFromResponse(response, targetProvider);
 
-      console.log(chalk.gray(`Raw summary response: "${content}"`));
-      console.log(chalk.gray(`Summary response length: ${content?.length || 0}`));
-      console.log(chalk.gray(`Is summary valid JSON: ${this.isValidJSON(content)}`));
-
       // Clean the content to remove markdown code blocks
       const cleanedContent = this.cleanJSONResponse(content);
-      console.log(chalk.gray(`Cleaned summary content: "${cleanedContent}"`));
-      console.log(chalk.gray(`Is cleaned summary valid JSON: ${this.isValidJSON(cleanedContent)}`));
 
       // Try to parse as JSON first, if it's valid JSON extract the content
       try {
         const parsed = JSON.parse(cleanedContent);
-        console.log(chalk.gray(`Summary JSON parsed successfully`));
-        console.log(chalk.gray(`Summary JSON keys: ${Object.keys(parsed).join(', ')}`));
 
         if (parsed.summary) {
           content = parsed.summary;
-          console.log(chalk.gray(`Using parsed.summary: "${content}"`));
         } else if (typeof parsed === 'string') {
           content = parsed;
-          console.log(chalk.gray(`Using parsed string: "${content}"`));
         } else {
-          console.log(chalk.gray(`No summary field found, using cleaned content`));
           content = cleanedContent;
         }
       } catch {
-        console.log(chalk.gray(`Summary is not JSON, using cleaned content as plain text`));
         content = cleanedContent;
       }
 
       const finalSummary = content.trim().replace(/["']/g, ''); // Remove quotes
-      console.log(chalk.gray(`Final summary: "${finalSummary}"`));
 
       return finalSummary;
     } catch (error) {
-      console.log(chalk.gray(`❌ Summary generation failed: ${error}`));
-      console.log(chalk.gray(`Using fallback summary generation`));
       // Enhanced fallback summary with file details
       return this.generateEnhancedFallbackSummary(jiraTicket, gitChanges, repoInfo);
     }
@@ -607,6 +594,8 @@ export class AIDescriptionGeneratorService {
 
     try {
       switch (provider) {
+        case 'claude':
+          return await this.callClaudeAPI(client, prompt);
         case 'chatgpt':
           return await this.callChatGPTAPI(client, prompt);
         case 'gemini':
@@ -617,19 +606,75 @@ export class AIDescriptionGeneratorService {
           throw new Error(`Unsupported AI provider: ${provider}`);
       }
     } catch (error) {
-      console.error(`${provider.toUpperCase()} API failed:`, error);
       throw new Error(`${provider.toUpperCase()} API not available`);
     }
   }
 
-  private async callChatGPTAPI(client: AxiosInstance, prompt: string): Promise<any> {
-    let aiProvidersConfig;
+  private getAIProvidersConfig() {
     try {
-      aiProvidersConfig = getConfig('aiProviders');
+      return getConfig('aiProviders');
     } catch {
-      aiProvidersConfig = null;
+      return null;
     }
-    const model = aiProvidersConfig?.openai?.model || process.env.OPENAI_MODEL || DEFAULT_MODELS.OPENAI;
+  }
+
+  private getModelForProvider(provider: AIProvider): string {
+    const aiProvidersConfig = this.getAIProvidersConfig();
+
+    switch (provider) {
+      case 'claude':
+        return aiProvidersConfig?.claude?.model || process.env.CLAUDE_MODEL || DEFAULT_MODELS.CLAUDE;
+      case 'chatgpt':
+        return aiProvidersConfig?.openai?.model || process.env.OPENAI_MODEL || DEFAULT_MODELS.OPENAI;
+      case 'gemini':
+        return aiProvidersConfig?.gemini?.model || process.env.GEMINI_MODEL || DEFAULT_MODELS.GEMINI;
+      case 'copilot':
+        return aiProvidersConfig?.copilot?.model || process.env.COPILOT_MODEL || DEFAULT_MODELS.COPILOT;
+      default:
+        throw new Error(`Unsupported provider: ${provider}`);
+    }
+  }
+
+  private generateFileUrl(repoInfo: { owner: string; repo: string; currentBranch: string }, filePath: string): string {
+    return `https://github.com/${repoInfo.owner}/${repoInfo.repo}/blob/${repoInfo.currentBranch}/${filePath}`;
+  }
+
+  private generateLineUrl(repoInfo: { owner: string; repo: string; currentBranch: string }, filePath: string, lineNumber: number): string {
+    return `${this.generateFileUrl(repoInfo, filePath)}#L${lineNumber}`;
+  }
+
+  private generateLineLinks(repoInfo: { owner: string; repo: string; currentBranch: string }, filePath: string, lineNumbers: number[]): string {
+    if (lineNumbers.length === 1) {
+      return `[Line ${lineNumbers[0]}](${this.generateLineUrl(repoInfo, filePath, lineNumbers[0])})`;
+    } else if (lineNumbers.length > 1) {
+      return lineNumbers.map(line => `[L${line}](${this.generateLineUrl(repoInfo, filePath, line)})`).join(', ');
+    }
+    return '';
+  }
+
+  private async callClaudeAPI(client: AxiosInstance, prompt: string): Promise<any> {
+    const model = this.getModelForProvider('claude');
+
+    const response = await client.post('/v1/messages', {
+      model: model,
+      max_tokens: LIMITS.MAX_API_TOKENS,
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]
+    });
+
+    if (!response.data || !response.data.content?.[0]?.text) {
+      throw new Error('No content received from Claude API');
+    }
+
+    return response.data;
+  }
+
+  private async callChatGPTAPI(client: AxiosInstance, prompt: string): Promise<any> {
+    const model = this.getModelForProvider('chatgpt');
 
     const response = await client.post('/chat/completions', {
       model: model,
@@ -642,7 +687,7 @@ export class AIDescriptionGeneratorService {
       ]
     });
 
-    if (!response.data.choices[0]?.message?.content) {
+    if (!response.data || !response.data.choices?.[0]?.message?.content) {
       throw new Error('No content received from ChatGPT API');
     }
 
@@ -650,13 +695,8 @@ export class AIDescriptionGeneratorService {
   }
 
   private async callGeminiAPI(client: AxiosInstance, prompt: string): Promise<any> {
-    let aiProvidersConfig;
-    try {
-      aiProvidersConfig = getConfig('aiProviders');
-    } catch {
-      aiProvidersConfig = null;
-    }
-    const model = aiProvidersConfig?.gemini?.model || process.env.GEMINI_MODEL || DEFAULT_MODELS.GEMINI;
+    const model = this.getModelForProvider('gemini');
+    const aiProvidersConfig = this.getAIProvidersConfig();
     const apiKey = aiProvidersConfig?.gemini?.apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
     const response = await client.post(`/models/${model}:generateContent?key=${apiKey}`, {
@@ -670,7 +710,7 @@ export class AIDescriptionGeneratorService {
       }
     });
 
-    if (!response.data.candidates?.[0]?.content?.parts?.[0]?.text) {
+    if (!response.data || !response.data.candidates?.[0]?.content?.parts?.[0]?.text) {
       throw new Error('No content received from Gemini API');
     }
 
@@ -678,13 +718,7 @@ export class AIDescriptionGeneratorService {
   }
 
   private async callCopilotAPI(client: AxiosInstance, prompt: string): Promise<any> {
-    let aiProvidersConfig;
-    try {
-      aiProvidersConfig = getConfig('aiProviders');
-    } catch {
-      aiProvidersConfig = null;
-    }
-    const model = aiProvidersConfig?.copilot?.model || process.env.COPILOT_MODEL || DEFAULT_MODELS.COPILOT;
+    const model = this.getModelForProvider('copilot');
 
     const response = await client.post('/chat/completions', {
       model: model,
@@ -697,7 +731,7 @@ export class AIDescriptionGeneratorService {
       ]
     });
 
-    if (!response.data.choices[0]?.message?.content) {
+    if (!response.data || !response.data.choices?.[0]?.message?.content) {
       throw new Error('No content received from Copilot API');
     }
 
@@ -706,16 +740,6 @@ export class AIDescriptionGeneratorService {
 
   private parseAIResponse(response: any, provider: AIProvider): GeneratedPRContent {
     const content = this.extractContentFromResponse(response, provider);
-
-    // Debug: Log the raw response
-    console.log(chalk.gray('\n🔍 Debug - Raw AI Response:'));
-    console.log(chalk.gray(`Provider: ${provider}`));
-    console.log(chalk.gray(`Full response structure:`));
-    console.log(chalk.gray(JSON.stringify(response, null, 2).substring(0, LIMITS.MAX_DESCRIPTION_PREVIEW_LENGTH) + '...'));
-    console.log(chalk.gray(`Extracted content:`));
-    console.log(chalk.gray(`"${content}"`));
-    console.log(chalk.gray(`Content length: ${content?.length || 0}`));
-    console.log(chalk.gray(`Is valid JSON: ${this.isValidJSON(content)}`));
 
     return this.parseResponseContent(content);
   }
@@ -750,6 +774,8 @@ export class AIDescriptionGeneratorService {
 
   private extractContentFromResponse(response: any, provider: AIProvider): string {
     switch (provider) {
+      case 'claude':
+        return response.content[0].text;
       case 'chatgpt':
       case 'copilot':
         return response.choices[0].message.content;
@@ -761,20 +787,11 @@ export class AIDescriptionGeneratorService {
   }
 
   private parseResponseContent(content: string): GeneratedPRContent {
-    console.log(chalk.gray('\n🔍 Debug - Parsing Response Content:'));
-    console.log(chalk.gray(`Raw content to parse: "${content}"`));
-
     // Clean the content to remove markdown code blocks
     const cleanedContent = this.cleanJSONResponse(content);
-    console.log(chalk.gray(`Cleaned content: "${cleanedContent}"`));
-    console.log(chalk.gray(`Is cleaned content valid JSON: ${this.isValidJSON(cleanedContent)}`));
 
     try {
       const parsed = JSON.parse(cleanedContent);
-      console.log(chalk.gray('✅ JSON parsing successful'));
-      console.log(chalk.gray(`Parsed object keys: ${Object.keys(parsed).join(', ')}`));
-      console.log(chalk.gray(`Parsed title: "${parsed.title}"`));
-      console.log(chalk.gray(`Parsed body length: ${parsed.body?.length || 0}`));
 
       // Use AI-generated content directly, only use empty string if truly missing
       // This way we can distinguish between AI-generated content and missing content
@@ -786,28 +803,15 @@ export class AIDescriptionGeneratorService {
         body: body.trim()
       };
 
-      console.log(chalk.gray(`Final parsed result:`));
-      console.log(chalk.gray(`- Title: "${result.title}"`));
-      console.log(chalk.gray(`- Body length: ${result.body.length}`));
-
       return result;
     } catch (error) {
-      console.log(chalk.gray('❌ JSON parsing failed'));
-      console.log(chalk.gray(`Parse error: ${error}`));
-      console.log(chalk.gray('Attempting manual extraction...'));
-
       // If parsing fails, extract content manually from the cleaned content first, then original
       const extractedTitle = this.extractTitle(cleanedContent) || this.extractTitle(content);
-      console.log(chalk.gray(`Extracted title: "${extractedTitle}"`));
 
       const result = {
         title: extractedTitle?.trim() || '',
         body: cleanedContent?.trim() || content?.trim() || ''
       };
-
-      console.log(chalk.gray(`Manual extraction result:`));
-      console.log(chalk.gray(`- Title: "${result.title}"`));
-      console.log(chalk.gray(`- Body length: ${result.body.length}`));
 
       return result;
     }
@@ -967,7 +971,7 @@ export class AIDescriptionGeneratorService {
 
     gitChanges.files.forEach(file => {
       if (repoInfo) {
-        const fileUrl = `https://github.com/${repoInfo.owner}/${repoInfo.repo}/blob/${repoInfo.currentBranch}/${file.file}`;
+        const fileUrl = this.generateFileUrl(repoInfo, file.file);
         summary += `### [${file.file}](${fileUrl}) (${file.status})\n`;
       } else {
         summary += `### \`${file.file}\` (${file.status})\n`;
@@ -976,12 +980,9 @@ export class AIDescriptionGeneratorService {
 
       // Add specific line URLs for key changes if repo info is available
       if (repoInfo && file.lineNumbers?.added.length && file.lineNumbers.added.length > 0) {
-        const fileUrl = `https://github.com/${repoInfo.owner}/${repoInfo.repo}/blob/${repoInfo.currentBranch}/${file.file}`;
         const keyLines = file.lineNumbers.added.slice(0, 3);
-        if (keyLines.length === 1) {
-          summary += `- **Key change**: [Line ${keyLines[0]}](${fileUrl}#L${keyLines[0]})\n`;
-        } else if (keyLines.length > 1) {
-          const lineLinks = keyLines.map(line => `[L${line}](${fileUrl}#L${line})`).join(', ');
+        if (keyLines.length > 0) {
+          const lineLinks = this.generateLineLinks(repoInfo, file.file, keyLines);
           summary += `- **Key changes**: ${lineLinks}\n`;
         }
       }
@@ -1060,10 +1061,10 @@ export class AIDescriptionGeneratorService {
   private extractDiffSummary(diffContent: string): string[] {
     const summary: string[] = [];
     const lines = diffContent.split('\n');
-    
+
     let addedLines = 0;
     let removedLines = 0;
-    
+
     for (const line of lines) {
       // Track function/method/class context
       if (line.match(/^[+-]\s*(function|def|class|interface|export|import|const|let|var)/)) {
@@ -1077,7 +1078,7 @@ export class AIDescriptionGeneratorService {
           }
         }
       }
-      
+
       // Track significant code changes
       if (line.startsWith('+') && !line.startsWith('+++')) {
         addedLines++;
@@ -1094,7 +1095,7 @@ export class AIDescriptionGeneratorService {
           summary.push(`Removed logic: ${codeLine}`);
         }
       }
-      
+
       // Capture import/export changes
       if (line.match(/^[+-]\s*(import|export)/)) {
         const match = line.match(/^[+-]\s*(.*)/);
@@ -1107,7 +1108,7 @@ export class AIDescriptionGeneratorService {
           }
         }
       }
-      
+
       // Capture configuration or constant changes
       if (line.match(/^[+-]\s*.*[=:]\s*(true|false|null|undefined|\d+|['"][^'"]*['"])/)) {
         const match = line.match(/^[+-]\s*(.*)/);
@@ -1121,12 +1122,12 @@ export class AIDescriptionGeneratorService {
         }
       }
     }
-    
+
     // Add summary statistics if significant changes
     if (addedLines > 10 || removedLines > 10) {
       summary.unshift(`Major changes: +${addedLines} lines, -${removedLines} lines`);
     }
-    
+
     // Limit to most important changes to avoid overwhelming the AI
     return summary.slice(0, 8);
   }
