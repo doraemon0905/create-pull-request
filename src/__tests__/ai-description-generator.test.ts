@@ -106,8 +106,15 @@ describe('AIDescriptionGeneratorService', () => {
         content: [{ text: '{"title": "PROJ-123: Test feature implementation", "body": "## Summary\\nImplemented new test feature"}' }]
       };
 
-      const mockAxiosInstance = mockedAxios.create();
-      (mockAxiosInstance.post as jest.Mock).mockResolvedValue({ data: mockResponse });
+      // Use the existing mocked instance, don't create a new one
+      const mockAxiosInstance = {
+        post: jest.fn().mockResolvedValue({ data: mockResponse }),
+        defaults: { timeout: 30000 }
+      };
+      mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
+      
+      // Recreate service to use the new mock
+      service = new AIDescriptionGeneratorService();
 
       const result = await service.generatePRDescription(mockOptions);
 
@@ -149,8 +156,15 @@ describe('AIDescriptionGeneratorService', () => {
         content: [{ text: 'Invalid JSON response' }]
       };
 
-      const mockAxiosInstance = mockedAxios.create();
-      (mockAxiosInstance.post as jest.Mock).mockResolvedValue({ data: mockResponse });
+      // Mock the axios instance to return the expected response
+      const mockAxiosInstance = {
+        post: jest.fn().mockResolvedValue({ data: mockResponse }),
+        defaults: { timeout: 30000 }
+      };
+      mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
+      
+      // Recreate service to use the new mock
+      service = new AIDescriptionGeneratorService();
 
       const result = await service.generatePRDescription(mockOptions);
 
@@ -333,8 +347,15 @@ describe('AIDescriptionGeneratorService', () => {
         content: [{ text: '{"title": "PROJ-123: Test", "body": "## Description\\nTest content\\n\\n## Testing\\n- [ ] Manual testing"}' }]
       };
 
-      const mockAxiosInstance = mockedAxios.create();
-      (mockAxiosInstance.post as jest.Mock).mockResolvedValue({ data: mockResponse });
+      // Mock the axios instance to return the expected response
+      const mockAxiosInstance = {
+        post: jest.fn().mockResolvedValue({ data: mockResponse }),
+        defaults: { timeout: 30000 }
+      };
+      mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
+      
+      // Recreate service to use the new mock
+      service = new AIDescriptionGeneratorService();
 
       const result = await service.generatePRDescription(optionsWithTemplate);
 
@@ -351,8 +372,15 @@ describe('AIDescriptionGeneratorService', () => {
         }]
       };
 
-      const mockAxiosInstance = mockedAxios.create();
-      (mockAxiosInstance.post as jest.Mock).mockResolvedValue({ data: mockResponse });
+      // Mock the axios instance to return the expected response
+      const mockAxiosInstance = {
+        post: jest.fn().mockResolvedValue({ data: mockResponse }),
+        defaults: { timeout: 30000 }
+      };
+      mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
+      
+      // Recreate service to use the new mock
+      service = new AIDescriptionGeneratorService();
 
       const result = await service.generatePRDescription(mockOptions);
 
@@ -367,8 +395,15 @@ describe('AIDescriptionGeneratorService', () => {
         }]
       };
 
-      const mockAxiosInstance = mockedAxios.create();
-      (mockAxiosInstance.post as jest.Mock).mockResolvedValue({ data: mockResponse });
+      // Mock the axios instance to return the expected response
+      const mockAxiosInstance = {
+        post: jest.fn().mockResolvedValue({ data: mockResponse }),
+        defaults: { timeout: 30000 }
+      };
+      mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
+      
+      // Recreate service to use the new mock
+      service = new AIDescriptionGeneratorService();
 
       const result = await service.generatePRDescription(mockOptions);
 
@@ -383,8 +418,15 @@ describe('AIDescriptionGeneratorService', () => {
         }]
       };
 
-      const mockAxiosInstance = mockedAxios.create();
-      (mockAxiosInstance.post as jest.Mock).mockResolvedValue({ data: mockResponse });
+      // Mock the axios instance to return the expected response
+      const mockAxiosInstance = {
+        post: jest.fn().mockResolvedValue({ data: mockResponse }),
+        defaults: { timeout: 30000 }
+      };
+      mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
+      
+      // Recreate service to use the new mock
+      service = new AIDescriptionGeneratorService();
 
       const result = await service.generatePRDescription(mockOptions);
 

@@ -13,16 +13,16 @@ describe('GitService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     mockGit = {
-      status: jest.fn(),
-      diff: jest.fn(),
-      log: jest.fn(),
-      raw: jest.fn(),
-      revparse: jest.fn(),
       branch: jest.fn(),
+      diffSummary: jest.fn(),
+      log: jest.fn(),
+      diff: jest.fn(),
+      status: jest.fn(),
+      checkIsRepo: jest.fn(),
       getRemotes: jest.fn(),
-      remote: jest.fn()
+      push: jest.fn()
     } as any;
 
     mockedSimpleGit.mockReturnValue(mockGit);
@@ -30,354 +30,291 @@ describe('GitService', () => {
   });
 
   describe('constructor', () => {
-    it('should initialize simple-git instance', () => {
-      expect(simpleGit).toHaveBeenCalledWith(process.cwd());
+    it('should initialize simple-git', () => {
+      expect(mockedSimpleGit).toHaveBeenCalled();
     });
   });
 
   describe('getCurrentBranch', () => {
     it('should return current branch name', async () => {
-      mockGit.revparse.mockResolvedValue('feature/PROJ-123-test-feature');
+      const mockBranchResult = {
+        current: 'feature/test-branch',
+        all: ['main', 'feature/test-branch']
+      };
+
+      mockGit.branch.mockResolvedValue(mockBranchResult as any);
 
       const result = await gitService.getCurrentBranch();
 
-      expect(result).toBe('feature/PROJ-123-test-feature');
-      expect(mockGit.revparse).toHaveBeenCalledWith(['--abbrev-ref', 'HEAD']);
+      expect(result).toBe('feature/test-branch');
+      expect(mockGit.branch).toHaveBeenCalled();
+    });
+
+    it('should handle errors gracefully', async () => {
+      mockGit.branch.mockRejectedValue(new Error('Git error'));
+
+      await expect(gitService.getCurrentBranch()).rejects.toThrow(
+        'Failed to get current branch: Git error'
+      );
+    });
+  });
+
+  describe('validateRepository', () => {
+    it('should validate repository successfully', async () => {
+      mockGit.checkIsRepo.mockResolvedValue(true as any);
+
+      await expect(gitService.validateRepository()).resolves.toBeUndefined();
+      expect(mockGit.checkIsRepo).toHaveBeenCalled();
+    });
+
+    it('should throw error for invalid repository', async () => {
+      mockGit.checkIsRepo.mockResolvedValue(false as any);
+
+      await expect(gitService.validateRepository()).rejects.toThrow(
+        'Not in a git repository'
+      );
     });
 
     it('should handle git errors', async () => {
-      mockGit.revparse.mockRejectedValue(new Error('Git error'));
+      mockGit.checkIsRepo.mockRejectedValue(new Error('Git command failed'));
 
-      await expect(gitService.getCurrentBranch()).rejects.toThrow('Git error');
+      await expect(gitService.validateRepository()).rejects.toThrow(
+        'Git repository validation failed: Git command failed'
+      );
     });
   });
 
-  describe('getTicketFromBranch', () => {
-    it('should extract ticket from branch name', async () => {
-      mockGit.revparse.mockResolvedValue('feature/PROJ-123-implement-feature');
-
-      const result = await gitService.getTicketFromBranch();
-
-      expect(result).toBe('PROJ-123');
-    });
-
-    it('should extract ticket from different branch patterns', async () => {
-      const testCases = [
-        ['feature/ABC-456', 'ABC-456'],
-        ['bugfix/XYZ-789-fix-issue', 'XYZ-789'],
-        ['hotfix/TEST-1-urgent', 'TEST-1'],
-        ['ABC-999/some-description', 'ABC-999'],
-        ['develop', null],
-        ['main', null],
-        ['feature/no-ticket', null]
-      ];
-
-      for (const [branchName, expectedTicket] of testCases) {
-        mockGit.revparse.mockResolvedValue(branchName);
-        const result = await gitService.getTicketFromBranch();
-        expect(result).toBe(expectedTicket);
-      }
-    });
-  });
-
-  describe('getChanges', () => {
-    it('should return git changes with file details', async () => {
-      const mockDiffResult: DiffResult = {
-        files: [
-          {
-            file: 'src/test.ts',
-            changes: 25,
-            insertions: 20,
-            deletions: 5,
-            binary: false
-          },
-          {
-            file: 'src/utils.ts',
-            changes: 15,
-            insertions: 10,
-            deletions: 5,
-            binary: false
-          }
-        ]
-      } as DiffResult;
-
-      const mockCommits = {
-        all: [
-          {
-            hash: 'abc123',
-            message: 'feat: implement new feature',
-            author_name: 'Test User'
-          },
-          {
-            hash: 'def456',
-            message: 'fix: resolve bug',
-            author_name: 'Test User'
-          }
-        ]
+  describe('hasUncommittedChanges', () => {
+    it('should return true when there are uncommitted changes', async () => {
+      const mockStatus = {
+        modified: ['file1.ts'],
+        created: ['file2.ts'],
+        deleted: [],
+        staged: [],
+        not_added: [],
+        conflicted: [],
+        files: ['file1.ts', 'file2.ts']
       };
 
-      const mockDetailedDiff = `diff --git a/src/test.ts b/src/test.ts
-index 1234567..abcdefg 100644
---- a/src/test.ts
-+++ b/src/test.ts
-@@ -1,5 +1,8 @@
- export function test() {
-+  console.log('new line');
-   return true;
- }
-+
-+export function newFunction() {
-+  return 'new';
-+}`;
+      mockGit.status.mockResolvedValue(mockStatus as any);
 
-      mockGit.diff.mockResolvedValue(mockDiffResult);
-      mockGit.log.mockResolvedValue(mockCommits as any);
-      mockGit.raw.mockResolvedValue(mockDetailedDiff);
-
-      const result = await gitService.getChanges('main');
-
-      expect(result).toEqual({
-        totalFiles: 2,
-        totalInsertions: 30,
-        totalDeletions: 10,
-        files: [
-          {
-            file: 'src/test.ts',
-            status: 'modified',
-            insertions: 20,
-            deletions: 5,
-            lineNumbers: {
-              added: [2, 6, 7, 8],
-              removed: []
-            },
-            diffContent: expect.stringContaining('console.log(\'new line\');')
-          },
-          {
-            file: 'src/utils.ts',
-            status: 'modified',
-            insertions: 10,
-            deletions: 5,
-            lineNumbers: { added: [], removed: [] },
-            diffContent: ''
-          }
-        ],
-        commits: [
-          'feat: implement new feature',
-          'fix: resolve bug'
-        ]
-      });
-
-      expect(mockGit.diff).toHaveBeenCalledWith(['--numstat', 'main...HEAD']);
-      expect(mockGit.log).toHaveBeenCalledWith(['main..HEAD']);
-    });
-
-    it('should handle files with different statuses', async () => {
-      const mockDiffResult: DiffResult = {
-        files: [
-          {
-            file: 'src/new.ts',
-            changes: 10,
-            insertions: 10,
-            deletions: 0,
-            binary: false
-          },
-          {
-            file: 'src/deleted.ts',
-            changes: 5,
-            insertions: 0,
-            deletions: 5,
-            binary: false
-          }
-        ]
-      } as DiffResult;
-
-      mockGit.diff.mockResolvedValue(mockDiffResult);
-      mockGit.log.mockResolvedValue({ all: [] } as any);
-      mockGit.raw.mockResolvedValue('');
-
-      const result = await gitService.getChanges('main');
-
-      expect(result.files[0].status).toBe('added');
-      expect(result.files[1].status).toBe('deleted');
-    });
-
-    it('should handle binary files', async () => {
-      const mockDiffResult: DiffResult = {
-        files: [
-          {
-            file: 'assets/image.png',
-            changes: 0,
-            insertions: 0,
-            deletions: 0,
-            binary: true
-          }
-        ]
-      } as DiffResult;
-
-      mockGit.diff.mockResolvedValue(mockDiffResult);
-      mockGit.log.mockResolvedValue({ all: [] } as any);
-      mockGit.raw.mockResolvedValue('Binary files differ');
-
-      const result = await gitService.getChanges('main');
-
-      expect(result.files[0].status).toBe('modified');
-      expect(result.files[0].diffContent).toBe('Binary files differ');
-    });
-
-    it('should handle empty changes', async () => {
-      const mockDiffResult: DiffResult = {
-        files: []
-      } as DiffResult;
-
-      mockGit.diff.mockResolvedValue(mockDiffResult);
-      mockGit.log.mockResolvedValue({ all: [] } as any);
-
-      const result = await gitService.getChanges('main');
-
-      expect(result).toEqual({
-        totalFiles: 0,
-        totalInsertions: 0,
-        totalDeletions: 0,
-        files: [],
-        commits: []
-      });
-    });
-  });
-
-  describe('getRemoteOriginUrl', () => {
-    it('should return remote origin URL', async () => {
-      const mockRemotes = [
-        {
-          name: 'origin',
-          refs: {
-            fetch: 'https://github.com/user/repo.git',
-            push: 'https://github.com/user/repo.git'
-          }
-        }
-      ];
-
-      mockGit.getRemotes.mockResolvedValue(mockRemotes as any);
-
-      const result = await gitService.getRemoteOriginUrl();
-
-      expect(result).toBe('https://github.com/user/repo.git');
-      expect(mockGit.getRemotes).toHaveBeenCalledWith(true);
-    });
-
-    it('should return null when no origin remote', async () => {
-      const mockRemotes = [
-        {
-          name: 'upstream',
-          refs: {
-            fetch: 'https://github.com/upstream/repo.git',
-            push: 'https://github.com/upstream/repo.git'
-          }
-        }
-      ];
-
-      mockGit.getRemotes.mockResolvedValue(mockRemotes as any);
-
-      const result = await gitService.getRemoteOriginUrl();
-
-      expect(result).toBeNull();
-    });
-
-    it('should handle git errors', async () => {
-      mockGit.getRemotes.mockRejectedValue(new Error('Git error'));
-
-      await expect(gitService.getRemoteOriginUrl()).rejects.toThrow('Git error');
-    });
-  });
-
-  describe('isGitRepository', () => {
-    it('should return true for git repository', async () => {
-      mockGit.raw.mockResolvedValue('true');
-
-      const result = await gitService.isGitRepository();
+      const result = await gitService.hasUncommittedChanges();
 
       expect(result).toBe(true);
-      expect(mockGit.raw).toHaveBeenCalledWith(['rev-parse', '--is-inside-work-tree']);
+      expect(mockGit.status).toHaveBeenCalled();
     });
 
-    it('should return false for non-git directory', async () => {
-      mockGit.raw.mockRejectedValue(new Error('Not a git repository'));
+    it('should return false when repository is clean', async () => {
+      const mockStatus = {
+        modified: [],
+        created: [],
+        deleted: [],
+        staged: [],
+        not_added: [],
+        conflicted: [],
+        files: []
+      };
 
-      const result = await gitService.isGitRepository();
+      mockGit.status.mockResolvedValue(mockStatus as any);
+
+      const result = await gitService.hasUncommittedChanges();
+
+      expect(result).toBe(false);
+    });
+
+    it('should handle errors gracefully', async () => {
+      mockGit.status.mockRejectedValue(new Error('Git status failed'));
+
+      await expect(gitService.hasUncommittedChanges()).rejects.toThrow(
+        'Failed to check git status: Git status failed'
+      );
+    });
+  });
+
+  describe('branchExists', () => {
+    it('should return true for existing branch', async () => {
+      const mockBranches = {
+        all: [
+          'main',
+          'remotes/origin/feature/test-branch',
+          'feature/local-branch'
+        ],
+        branches: {},
+        current: 'main'
+      };
+
+      mockGit.branch.mockResolvedValue(mockBranches as any);
+
+      const result = await gitService.branchExists('test-branch');
+
+      expect(result).toBe(true);
+      expect(mockGit.branch).toHaveBeenCalledWith(['-a']);
+    });
+
+    it('should return false for non-existing branch', async () => {
+      const mockBranches = {
+        all: [
+          'main',
+          'remotes/origin/feature/other-branch'
+        ],
+        branches: {},
+        current: 'main'
+      };
+
+      mockGit.branch.mockResolvedValue(mockBranches as any);
+
+      const result = await gitService.branchExists('non-existing');
 
       expect(result).toBe(false);
     });
   });
 
-  describe('parseLineNumbers', () => {
-    it('should parse added and removed line numbers from diff', () => {
-      const diff = `@@ -1,5 +1,8 @@
- export function test() {
-+  console.log('added line 2');
-   return true;
--  console.log('removed line');
- }
-+
-+export function newFunction() {
-+  return 'new';
-+}`;
+  describe('getChanges', () => {
+    const mockDiffSummary = {
+      changed: 2,
+      insertions: 15,
+      deletions: 5,
+      files: [
+        {
+          file: 'src/test.ts',
+          changes: 10,
+          insertions: 8,
+          deletions: 2,
+          binary: false
+        },
+        {
+          file: 'src/utils.ts',
+          changes: 10,
+          insertions: 7,
+          deletions: 3,
+          binary: false
+        }
+      ]
+    };
 
-      const result = (gitService as any).parseLineNumbers(diff);
+    const mockLogResult = {
+      all: [
+        { message: 'feat: add new feature' },
+        { message: 'fix: bug fix' }
+      ],
+      latest: null,
+      total: 2
+    };
 
-      expect(result.added).toEqual([2, 6, 7, 8]);
-      expect(result.removed).toEqual([4]);
+    beforeEach(() => {
+      mockGit.branch.mockResolvedValue({
+        current: 'feature/test-branch',
+        all: ['main', 'feature/test-branch']
+      } as any);
+      
+      mockGit.diffSummary.mockResolvedValue(mockDiffSummary as any);
+      mockGit.log.mockResolvedValue(mockLogResult as any);
     });
 
-    it('should handle multiple hunks', () => {
-      const diff = `@@ -1,3 +1,4 @@
- line 1
-+added line 2
- line 3
-@@ -10,2 +11,3 @@
- line 10
-+added line 12
- line 11`;
+    it('should get changes successfully', async () => {
+      const result = await gitService.getChanges('main');
 
-      const result = (gitService as any).parseLineNumbers(diff);
+      expect(result).toEqual({
+        totalFiles: 2,
+        totalInsertions: 15,
+        totalDeletions: 5,
+        files: [
+          {
+            file: 'src/test.ts',
+            status: 'modified',
+            changes: 10,
+            insertions: 8,
+            deletions: 2
+          },
+          {
+            file: 'src/utils.ts',
+            status: 'modified',
+            changes: 10,
+            insertions: 7,
+            deletions: 3
+          }
+        ],
+        commits: ['feat: add new feature', 'fix: bug fix']
+      });
 
-      expect(result.added).toEqual([2, 12]);
-      expect(result.removed).toEqual([]);
+      expect(mockGit.diffSummary).toHaveBeenCalledWith(['main...HEAD']);
+      expect(mockGit.log).toHaveBeenCalledWith({ from: 'main', to: 'HEAD' });
     });
 
-    it('should handle empty diff', () => {
-      const result = (gitService as any).parseLineNumbers('');
+    it('should throw error when comparing branch with itself', async () => {
+      mockGit.branch.mockResolvedValue({
+        current: 'main',
+        all: ['main']
+      } as any);
 
-      expect(result.added).toEqual([]);
-      expect(result.removed).toEqual([]);
+      await expect(gitService.getChanges('main')).rejects.toThrow(
+        "Cannot compare branch with itself. Current branch is 'main'. Please checkout a feature branch."
+      );
+    });
+
+    it('should handle git errors', async () => {
+      mockGit.diffSummary.mockRejectedValue(new Error('Git diff failed'));
+
+      await expect(gitService.getChanges('main')).rejects.toThrow(
+        'Failed to get git changes: Git diff failed'
+      );
     });
   });
 
-  describe('getFileStatus', () => {
-    it('should determine correct file status', () => {
-      expect((gitService as any).getFileStatus(10, 0)).toBe('added');
-      expect((gitService as any).getFileStatus(0, 5)).toBe('deleted');
-      expect((gitService as any).getFileStatus(10, 5)).toBe('modified');
-      expect((gitService as any).getFileStatus(0, 0)).toBe('modified');
+  describe('getDiffContent', () => {
+    it('should get diff content successfully', async () => {
+      const mockDiff = 'diff --git a/file.ts b/file.ts\n+added line\n-removed line';
+      mockGit.diff.mockResolvedValue(mockDiff);
+
+      const result = await gitService.getDiffContent('main');
+
+      expect(result).toBe(mockDiff);
+      expect(mockGit.diff).toHaveBeenCalledWith(['main...HEAD']);
+    });
+
+    it('should truncate large diffs', async () => {
+      const lines = Array(1000).fill('line').join('\n');
+      mockGit.diff.mockResolvedValue(lines);
+
+      const result = await gitService.getDiffContent('main', 100);
+
+      expect(result).toContain('... (diff truncated for brevity)');
+    });
+
+    it('should handle errors gracefully', async () => {
+      mockGit.diff.mockRejectedValue(new Error('Git diff failed'));
+
+      await expect(gitService.getDiffContent('main')).rejects.toThrow(
+        'Failed to get diff content: Git diff failed'
+      );
     });
   });
 
-  describe('Integration with REGEX_PATTERNS', () => {
-    it('should use REGEX_PATTERNS for ticket extraction', async () => {
-      const testBranches = [
-        'feature/PROJ-123',
-        'bugfix/ABC-456-fix',
-        'hotfix/XYZ-789',
-        'invalid-branch'
-      ];
+  describe('pushCurrentBranch', () => {
+    it('should push current branch successfully', async () => {
+      mockGit.branch.mockResolvedValue({
+        current: 'feature/test-branch',
+        all: ['main', 'feature/test-branch']
+      } as any);
+      
+      mockGit.push.mockResolvedValue(undefined as any);
 
-      for (const branch of testBranches) {
-        mockGit.revparse.mockResolvedValue(branch);
-        const result = await gitService.getTicketFromBranch();
-        
-        const match = branch.match(REGEX_PATTERNS.JIRA_TICKET_FROM_BRANCH);
-        const expected = match ? match[1] : null;
-        
-        expect(result).toBe(expected);
-      }
+      await gitService.pushCurrentBranch();
+
+      expect(mockGit.push).toHaveBeenCalledWith('origin', 'feature/test-branch', ['--set-upstream']);
+    });
+
+    it('should handle push errors', async () => {
+      mockGit.branch.mockResolvedValue({
+        current: 'feature/test-branch',
+        all: ['main', 'feature/test-branch']
+      } as any);
+      
+      mockGit.push.mockRejectedValue(new Error('Push failed'));
+
+      await expect(gitService.pushCurrentBranch()).rejects.toThrow(
+        'Failed to push current branch: Push failed'
+      );
     });
   });
 });
