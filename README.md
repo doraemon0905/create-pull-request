@@ -1,12 +1,12 @@
 # Create Pull Request CLI
 
-A CLI tool that automatically generates pull request descriptions based on Jira tickets and file changes using AI providers (ChatGPT, Gemini, or GitHub Copilot).
+A CLI tool that automatically generates pull request descriptions based on Jira tickets and file changes using AI providers (Claude, ChatGPT, Gemini, or GitHub Copilot).
 
 ## Features
 
 - 🎫 **Jira Integration**: Automatically fetches ticket information from Jira
 - 🔄 **Git Analysis**: Analyzes file changes and commit history
-- 🤖 **AI-Powered**: Uses multiple AI providers (ChatGPT → Gemini → Copilot) to generate intelligent PR descriptions
+- 🤖 **AI-Powered**: Uses multiple AI providers (Claude → ChatGPT → Gemini → Copilot) to generate intelligent PR descriptions
 - 📋 **Template Support**: Automatically detects and uses PR templates from your repository
 - ✅ **User Review**: Always asks for user confirmation before creating the PR
 - 🏃‍♂️ **Dry Run Mode**: Preview generated content without creating a PR
@@ -53,7 +53,11 @@ This will guide you through setting up all required credentials and AI providers
    GITHUB_TOKEN=your-github-personal-access-token
 
    # AI Providers (at least one required)
-   # Primary: OpenAI/ChatGPT (recommended)
+   # Primary: Anthropic Claude (recommended)
+   CLAUDE_API_KEY=your-claude-api-key
+   CLAUDE_MODEL=claude-3-5-sonnet-20241022
+
+   # Secondary: OpenAI/ChatGPT
    OPENAI_API_KEY=your-openai-api-key
    OPENAI_MODEL=gpt-4o
 
@@ -77,7 +81,12 @@ This will guide you through setting up all required credentials and AI providers
 - Generate a new token with `repo` permissions
 - Copy the token to your configuration
 
-**OpenAI API Key (Recommended):**
+**Anthropic Claude API Key (Recommended):**
+- Go to [Anthropic Console](https://console.anthropic.com/)
+- Create a new API key
+- Copy the key to your configuration
+
+**OpenAI API Key (Secondary):**
 - Go to [OpenAI API Keys](https://platform.openai.com/api-keys)
 - Create a new secret key
 - Copy the key to your configuration
@@ -132,7 +141,7 @@ create-pr create --jira PROJ-123 --dry-run
 2. **Jira Integration**: Fetches ticket details including summary, description, and metadata
 3. **Git Analysis**: Analyzes file changes, commit messages, and diff content
 4. **Template Detection**: Looks for PR templates in your repository
-5. **AI Provider Selection**: Automatically selects the best available AI provider (ChatGPT → Gemini → Copilot)
+5. **AI Provider Selection**: Automatically selects the best available AI provider (Claude → ChatGPT → Gemini → Copilot)
 6. **AI Generation**: Uses the selected AI provider to generate intelligent descriptions with automatic fallback
 7. **User Review**: Shows generated content and asks for confirmation
 8. **PR Creation**: Creates the pull request on GitHub
@@ -141,25 +150,32 @@ create-pr create --jira PROJ-123 --dry-run
 
 The tool uses AI providers in the following priority order:
 
-1. **ChatGPT (OpenAI)** - Primary provider
+1. **Claude (Anthropic)** - Primary provider
    - Most reliable and consistent results
+   - Excellent code understanding and analysis
+   - Superior reasoning capabilities for complex changes
    - Fast response times
-   - Excellent understanding of code context
 
-2. **Gemini (Google)** - Fallback provider
-   - Good alternative when ChatGPT is unavailable
+2. **ChatGPT (OpenAI)** - Secondary provider
+   - Reliable alternative when Claude is unavailable
+   - Good understanding of code context
+   - Consistent performance
+
+3. **Gemini (Google)** - Fallback provider
+   - Good alternative when primary providers are unavailable
    - Strong analytical capabilities
    - Handles complex code changes well
 
-3. **GitHub Copilot** - Legacy provider
+4. **GitHub Copilot** - Legacy provider
    - May have stability issues
    - Uses GitHub infrastructure
    - Fallback option for existing setups
 
 If multiple providers are configured, the tool will automatically:
-- Try ChatGPT first
-- Fall back to Gemini if ChatGPT fails
-- Fall back to Copilot if both ChatGPT and Gemini fail
+- Try Claude first
+- Fall back to ChatGPT if Claude fails
+- Fall back to Gemini if both Claude and ChatGPT fail
+- Fall back to Copilot if all other providers fail
 - Use template-based generation if all AI providers fail
 
 You can configure multiple providers for maximum reliability.
@@ -219,7 +235,8 @@ Title: PROJ-123: Implement user authentication
 - Jira account with API access
 - GitHub account with repository access
 - At least one AI provider:
-  - **OpenAI API key** (recommended) - Most reliable and fastest
+  - **Anthropic Claude API key** (recommended) - Most reliable and intelligent
+  - **OpenAI API key** (secondary) - Reliable alternative
   - **Google Gemini API key** (fallback) - Good alternative option
   - **GitHub Copilot API token** (legacy) - May have availability issues
 
@@ -266,7 +283,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 2. **Template Not Found**: PR templates are optional. The tool will use a default format if none are found
 3. **No Changes Detected**: Make sure you're on a feature branch with changes compared to the base branch
 4. **AI Provider Issues**: 
-   - If ChatGPT fails, the tool automatically falls back to Gemini, then Copilot
+   - If Claude fails, the tool automatically falls back to ChatGPT, then Gemini, then Copilot
    - If all AI providers fail, the tool uses template-based generation
    - Run `create-pr setup` to configure additional AI providers
 5. **No AI Providers Configured**: At least one AI provider must be configured. Run `create-pr setup` to configure providers
