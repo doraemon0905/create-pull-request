@@ -12,6 +12,10 @@ export interface CopilotConfig {
     apiToken?: string | null;
 }
 export interface AIProvidersConfig {
+    claude?: {
+        apiKey?: string | null;
+        model?: string;
+    };
     openai?: {
         apiKey?: string | null;
         model?: string;

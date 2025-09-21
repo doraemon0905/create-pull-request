@@ -7,16 +7,20 @@ const os = require('os');
 const chalk = require('chalk');
 const { setupGitExtension } = require('./setup-git-extension');
 
+// Import constants from compiled JavaScript
+const { CONFIG, DEFAULT_MODELS, SYSTEM } = require('../lib/constants');
+
 // Configuration constants
-const CONFIG_DIRECTORY_NAME = '.create-pr';
-const getConfigFilePath()_NAME = 'env-config.json';
-const DEFAULT_GPT_MODEL = DEFAULT_GPT_MODEL;
-const DEFAULT_GEMINI_MODEL = DEFAULT_GEMINI_MODEL;
-const CONFIG_VERSION = CONFIG_VERSION;
-const EXECUTABLE_PERMISSIONS = EXECUTABLE_PERMISSIONS;
+const CONFIG_DIRECTORY_NAME = CONFIG.DIRECTORY_NAME;
+const CONFIG_FILE_NAME = CONFIG.FILE_NAME;
+const DEFAULT_CLAUDE_MODEL = DEFAULT_MODELS.CLAUDE;
+const DEFAULT_GPT_MODEL = DEFAULT_MODELS.OPENAI;
+const DEFAULT_GEMINI_MODEL = DEFAULT_MODELS.GEMINI;
+const CONFIG_VERSION = CONFIG.VERSION;
+const EXECUTABLE_PERMISSIONS = SYSTEM.EXECUTABLE_PERMISSIONS;
 
 function getConfigFilePath() {
-    return path.join(os.homedir(), CONFIG_DIRECTORY_NAME, getConfigFilePath()_NAME);
+    return path.join(os.homedir(), CONFIG_DIRECTORY_NAME, CONFIG_FILE_NAME);
 }
 
 async function setupEnvironment() {
@@ -88,15 +92,41 @@ async function setupEnvironment() {
             name: 'aiProvider',
             message: 'Select your preferred AI provider for PR description generation:',
             choices: [
+                { name: 'Claude (Anthropic) - Recommended', value: 'claude' },
                 { name: 'ChatGPT (OpenAI)', value: 'chatgpt' },
                 { name: 'Gemini (Google)', value: 'gemini' },
                 { name: 'GitHub Copilot', value: 'copilot' },
                 { name: 'Skip AI provider setup', value: 'none' }
             ],
-            default: existingConfig?.aiProviders?.openai ? 'chatgpt' :
+            default: existingConfig?.aiProviders?.claude ? 'claude' :
+                     existingConfig?.aiProviders?.openai ? 'chatgpt' :
                      existingConfig?.aiProviders?.gemini ? 'gemini' :
                      existingConfig?.aiProviders?.copilot || existingConfig?.copilot?.apiToken ? 'copilot' :
-                     'chatgpt'
+                     'claude'
+        },
+        {
+            type: 'password',
+            name: 'claudeApiKey',
+            message: (answers) => {
+                const hasExisting = existingConfig?.aiProviders?.claude?.apiKey;
+                return hasExisting ? 'Enter your Anthropic API key (leave blank to keep current):' : 'Enter your Anthropic API key:';
+            },
+            when: (answers) => answers.aiProvider === 'claude',
+            default: '',
+            validate: (input, answers) => {
+                // If there's an existing key and input is blank, that's OK
+                if (existingConfig?.aiProviders?.claude?.apiKey && !input.trim()) {
+                    return true;
+                }
+                return input.trim() ? true : 'Anthropic API key is required for Claude';
+            }
+        },
+        {
+            type: 'input',
+            name: 'claudeModel',
+            message: 'Enter Claude model to use:',
+            when: (answers) => answers.aiProvider === 'claude',
+            default: existingConfig?.aiProviders?.claude?.model || DEFAULT_CLAUDE_MODEL
         },
         {
             type: 'password',
@@ -222,7 +252,12 @@ async function setupEnvironment() {
         };
 
         // Configure AI providers based on selection
-        if (answers.aiProvider === 'chatgpt') {
+        if (answers.aiProvider === 'claude') {
+            config.aiProviders.claude = {
+                apiKey: answers.claudeApiKey || existingConfig?.aiProviders?.claude?.apiKey,
+                model: answers.claudeModel || existingConfig?.aiProviders?.claude?.model || DEFAULT_CLAUDE_MODEL
+            };
+        } else if (answers.aiProvider === 'chatgpt') {
             config.aiProviders.openai = {
                 apiKey: answers.openaiApiKey || existingConfig?.aiProviders?.openai?.apiKey,
                 model: answers.openaiModel || existingConfig?.aiProviders?.openai?.model || DEFAULT_GPT_MODEL
@@ -260,7 +295,19 @@ ${config.jira.projectKey ? `JIRA_PROJECT_KEY=${config.jira.projectKey}` : '# JIR
 # AI Provider Configuration
 `;
 
-        // Add AI provider specific environment variables
+        // Add AI provider specific environment variables  
+        if (config.aiProviders.claude) {
+            envContent += `ANTHROPIC_API_KEY=${config.aiProviders.claude.apiKey}
+CLAUDE_API_KEY=${config.aiProviders.claude.apiKey}
+CLAUDE_MODEL=${config.aiProviders.claude.model}
+`;
+        } else {
+            envContent += `# ANTHROPIC_API_KEY=
+# CLAUDE_API_KEY=
+# CLAUDE_MODEL=claude-3-5-sonnet-20241022
+`;
+        }
+
         if (config.aiProviders.openai) {
             envContent += `OPENAI_API_KEY=${config.aiProviders.openai.apiKey}
 OPENAI_MODEL=${config.aiProviders.openai.model}
@@ -347,6 +394,7 @@ function validateConfig(config) {
     
     // Check if at least one AI provider is configured
     const hasAIProvider = config.aiProviders && (
+        config.aiProviders.claude?.apiKey ||
         config.aiProviders.openai?.apiKey ||
         config.aiProviders.gemini?.apiKey ||
         config.aiProviders.copilot?.apiToken ||
@@ -468,14 +516,33 @@ async function updateConfiguration() {
             name: 'aiProvider',
             message: 'Select AI provider to configure:',
             choices: [
+                { name: 'Claude (Anthropic) - Recommended', value: 'claude' },
                 { name: 'ChatGPT (OpenAI)', value: 'chatgpt' },
                 { name: 'Gemini (Google)', value: 'gemini' },
                 { name: 'GitHub Copilot', value: 'copilot' },
                 { name: 'Remove AI provider configuration', value: 'none' }
             ],
-            default: currentConfig.aiProviders?.openai ? 'chatgpt' : 
+            default: currentConfig.aiProviders?.claude ? 'claude' :
+                     currentConfig.aiProviders?.openai ? 'chatgpt' : 
                      currentConfig.aiProviders?.gemini ? 'gemini' :
-                     currentConfig.aiProviders?.copilot ? 'copilot' : 'chatgpt'
+                     currentConfig.aiProviders?.copilot ? 'copilot' : 'claude'
+        });
+
+        // Claude configuration
+        detailQuestions.push({
+            type: 'password',
+            name: 'claudeApiKey',
+            message: `Update Anthropic API key (current: ${currentConfig.aiProviders?.claude?.apiKey ? 'set' : 'not set'}):`,
+            when: (answers) => answers.aiProvider === 'claude',
+            validate: (input) => input.trim() ? true : 'Anthropic API key is required for Claude'
+        });
+
+        detailQuestions.push({
+            type: 'input',
+            name: 'claudeModel',
+            message: 'Update Claude model:',
+            when: (answers) => answers.aiProvider === 'claude',
+            default: currentConfig.aiProviders?.claude?.model || DEFAULT_CLAUDE_MODEL
         });
 
         // ChatGPT configuration
@@ -568,12 +635,18 @@ async function updateConfiguration() {
         }
 
         // Clear existing AI provider configurations
+        delete updatedConfig.aiProviders.claude;
         delete updatedConfig.aiProviders.openai;
         delete updatedConfig.aiProviders.gemini;
         delete updatedConfig.aiProviders.copilot;
 
         // Configure the selected AI provider
-        if (answers.aiProvider === 'chatgpt') {
+        if (answers.aiProvider === 'claude') {
+            updatedConfig.aiProviders.claude = {
+                apiKey: answers.claudeApiKey,
+                model: answers.claudeModel || DEFAULT_CLAUDE_MODEL
+            };
+        } else if (answers.aiProvider === 'chatgpt') {
             updatedConfig.aiProviders.openai = {
                 apiKey: answers.openaiApiKey,
                 model: answers.openaiModel || DEFAULT_GPT_MODEL
@@ -625,7 +698,7 @@ module.exports = {
     getConfig,
     configExists,
     validateConfig,
-    getConfigFilePath()
+    getConfigFilePath
 };
 
 // Run setup if called directly

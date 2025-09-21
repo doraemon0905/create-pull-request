@@ -1,5 +1,6 @@
 // API Configuration
 export const API_URLS = {
+  CLAUDE_BASE_URL: 'https://api.anthropic.com',
   OPENAI_BASE_URL: 'https://api.openai.com/v1',
   GEMINI_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta',
   COPILOT_BASE_URL: 'https://api.githubcopilot.com',
@@ -8,6 +9,7 @@ export const API_URLS = {
 
 // Default Models
 export const DEFAULT_MODELS = {
+  CLAUDE: 'claude-3-5-sonnet-20241022',
   OPENAI: 'gpt-4o',
   GEMINI: 'gemini-1.5-pro',
   COPILOT: 'gpt-4o'

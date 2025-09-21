@@ -26,7 +26,7 @@ export interface GeneratedPRContent {
   summary?: string;
 }
 
-export type AIProvider = 'chatgpt' | 'gemini' | 'copilot';
+export type AIProvider = 'claude' | 'chatgpt' | 'gemini' | 'copilot';
 
 export interface AIConfig {
   provider: AIProvider;
@@ -53,6 +53,22 @@ export class AIDescriptionGeneratorService {
     } catch {
       // Fallback to environment variables if config doesn't exist
       aiProvidersConfig = null;
+    }
+
+    // Claude client (primary AI provider)
+    const claudeKey = aiProvidersConfig?.claude?.apiKey ||
+      process.env.ANTHROPIC_API_KEY ||
+      process.env.CLAUDE_API_KEY;
+    if (claudeKey) {
+      this.clients.set('claude', axios.create({
+        baseURL: API_URLS.CLAUDE_BASE_URL,
+        headers: {
+          'Authorization': `Bearer ${claudeKey}`,
+          'Content-Type': HEADERS.JSON_CONTENT_TYPE,
+          'anthropic-version': '2023-06-01'
+        },
+        timeout: LIMITS.API_TIMEOUT_MS
+      }));
     }
 
     // ChatGPT client
@@ -128,7 +144,7 @@ export class AIDescriptionGeneratorService {
     const availableProviders = Array.from(this.clients.keys());
 
     if (availableProviders.length === 0) {
-      throw new Error('No AI providers configured. Please set OPENAI_API_KEY, GEMINI_API_KEY, or configure GitHub Copilot.');
+      throw new Error('No AI providers configured. Please set ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, or configure GitHub Copilot.');
     }
 
     // If only one provider available, use it
@@ -138,8 +154,8 @@ export class AIDescriptionGeneratorService {
       return provider;
     }
 
-    // Prioritize ChatGPT, then Gemini, then Copilot
-    const preferredOrder: AIProvider[] = ['chatgpt', 'gemini', 'copilot'];
+    // Prioritize Claude first, then ChatGPT, then Gemini, then Copilot
+    const preferredOrder: AIProvider[] = ['claude', 'chatgpt', 'gemini', 'copilot'];
     for (const preferred of preferredOrder) {
       if (availableProviders.includes(preferred)) {
         const provider = preferred;
@@ -158,7 +174,7 @@ export class AIDescriptionGeneratorService {
           name: provider.toUpperCase(),
           value: provider
         })),
-        default: availableProviders.includes('chatgpt') ? 'chatgpt' : availableProviders[0]
+        default: availableProviders.includes('claude') ? 'claude' : availableProviders.includes('chatgpt') ? 'chatgpt' : availableProviders[0]
       }
     ]);
 
@@ -166,7 +182,7 @@ export class AIDescriptionGeneratorService {
   }
 
   private async tryFallbackProviders(options: GenerateDescriptionOptions): Promise<GeneratedPRContent> {
-    const providers: AIProvider[] = ['chatgpt', 'gemini', 'copilot'];
+    const providers: AIProvider[] = ['claude', 'chatgpt', 'gemini', 'copilot'];
     const availableProviders = providers.filter(p => this.clients.has(p));
 
     // Remove the already tried provider
@@ -194,7 +210,7 @@ export class AIDescriptionGeneratorService {
   }
 
   private async generateSummary(options: GenerateDescriptionOptions, provider?: AIProvider): Promise<string> {
-    const targetProvider = provider || this.selectedProvider || 'chatgpt';
+    const targetProvider = provider || this.selectedProvider || 'claude';
     const { jiraTicket, gitChanges, diffContent, template, repoInfo } = options;
 
     let summaryPrompt = `Generate a detailed summary of this pull request with file links and explanations based on the following information:\n\n`;
@@ -607,6 +623,8 @@ export class AIDescriptionGeneratorService {
 
     try {
       switch (provider) {
+        case 'claude':
+          return await this.callClaudeAPI(client, prompt);
         case 'chatgpt':
           return await this.callChatGPTAPI(client, prompt);
         case 'gemini':
@@ -620,6 +638,33 @@ export class AIDescriptionGeneratorService {
       console.error(`${provider.toUpperCase()} API failed:`, error);
       throw new Error(`${provider.toUpperCase()} API not available`);
     }
+  }
+
+  private async callClaudeAPI(client: AxiosInstance, prompt: string): Promise<any> {
+    let aiProvidersConfig;
+    try {
+      aiProvidersConfig = getConfig('aiProviders');
+    } catch {
+      aiProvidersConfig = null;
+    }
+    const model = aiProvidersConfig?.claude?.model || process.env.CLAUDE_MODEL || DEFAULT_MODELS.CLAUDE;
+
+    const response = await client.post('/v1/messages', {
+      model: model,
+      max_tokens: LIMITS.MAX_API_TOKENS,
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]
+    });
+
+    if (!response.data.content?.[0]?.text) {
+      throw new Error('No content received from Claude API');
+    }
+
+    return response.data;
   }
 
   private async callChatGPTAPI(client: AxiosInstance, prompt: string): Promise<any> {
@@ -750,6 +795,8 @@ export class AIDescriptionGeneratorService {
 
   private extractContentFromResponse(response: any, provider: AIProvider): string {
     switch (provider) {
+      case 'claude':
+        return response.content[0].text;
       case 'chatgpt':
       case 'copilot':
         return response.choices[0].message.content;

@@ -1,10 +1,12 @@
 export declare const API_URLS: {
+    readonly CLAUDE_BASE_URL: "https://api.anthropic.com";
     readonly OPENAI_BASE_URL: "https://api.openai.com/v1";
     readonly GEMINI_BASE_URL: "https://generativelanguage.googleapis.com/v1beta";
     readonly COPILOT_BASE_URL: "https://api.githubcopilot.com";
     readonly JIRA_API_VERSION: "/rest/api/3";
 };
 export declare const DEFAULT_MODELS: {
+    readonly CLAUDE: "claude-3-5-sonnet-20241022";
     readonly OPENAI: "gpt-4o";
     readonly GEMINI: "gemini-1.5-pro";
     readonly COPILOT: "gpt-4o";

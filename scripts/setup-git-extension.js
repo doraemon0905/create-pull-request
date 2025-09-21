@@ -6,9 +6,12 @@ const os = require('os');
 const { spawn } = require('child_process');
 const chalk = require('chalk');
 
+// Import constants from compiled JavaScript
+const { CONFIG, SYSTEM } = require('../lib/constants');
+
 // Configuration constants
-const CONFIG_DIRECTORY_NAME = CONFIG_DIRECTORY_NAME;
-const EXECUTABLE_PERMISSIONS = EXECUTABLE_PERMISSIONS;
+const CONFIG_DIRECTORY_NAME = CONFIG.DIRECTORY_NAME;
+const EXECUTABLE_PERMISSIONS = SYSTEM.EXECUTABLE_PERMISSIONS;
 
 /**
  * Set up git extension to enable 'git create-pr' command
