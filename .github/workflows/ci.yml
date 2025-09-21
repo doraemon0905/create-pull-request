@@ -443,11 +443,23 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const ref = context.ref;
-            const branchName = context.ref.replace('refs/heads/', '').replace('refs/pull/', '').replace('/merge', '');
             
-            console.log(`🚀 Triggering SonarCloud analysis for ${owner}/${repo}@${branchName}`);
+            // Determine the source branch for SonarCloud
+            let sourceBranch;
+            if (ref.startsWith('refs/pull/')) {
+              // For pull requests, we need to get the source branch from the PR
+              // Since we're in a PR context, we can use the head ref
+              sourceBranch = context.payload.pull_request.head.ref;
+              console.log(`🔍 Pull request detected, using source branch: ${sourceBranch}`);
+            } else {
+              // For direct branch pushes, use the branch name
+              sourceBranch = ref.replace('refs/heads/', '');
+              console.log(`🔍 Branch push detected, using branch: ${sourceBranch}`);
+            }
+            
+            console.log(`🚀 Triggering SonarCloud analysis for ${owner}/${repo}@${sourceBranch}`);
             console.log(`📊 All CI jobs completed successfully, including report job`);
-            console.log(`🔍 Original ref: ${ref}, Branch name: ${branchName}`);
+            console.log(`🔍 Original ref: ${ref}, Source branch: ${sourceBranch}`);
             
              // Method 3: Direct API call using fetch (similar to curl command)
                 console.log('🔍 Attempting direct API call to workflow file...');
@@ -460,7 +472,7 @@ jobs:
                     'X-GitHub-Api-Version': '2022-11-28'
                   },
                   body: JSON.stringify({
-                    ref: branchName,
+                    ref: sourceBranch,
                     inputs: {
                       triggered_by: 'ci-pipeline',
                       ci_run_id: context.runId
