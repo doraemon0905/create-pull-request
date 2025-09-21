@@ -15,9 +15,104 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Validate code quality on all pushes and PRs
+  # Security checks - runs first (required)
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if run was cancelled
+        run: |
+          echo "🔍 Security Job - CI Run Information:"
+          echo "Workflow: ${{ github.workflow }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Run ID: ${{ github.run_id }}"
+          echo ""
+          echo "✅ Security job proceeding (previous runs cancelled if any)"
+      
+      - name: 🔍 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: 📦 Install dependencies
+        run: npm ci
+      
+      - name: 🔒 Run security audit
+        run: npm audit --audit-level=moderate
+      
+      - name: 🔍 Check for known vulnerabilities
+        run: |
+          echo "🔍 Checking for security vulnerabilities..."
+          npm audit --audit-level=high --json > audit-results.json || true
+          
+          # Check if there are high or critical vulnerabilities
+          if [ -f "audit-results.json" ]; then
+            HIGH_VULNS=$(cat audit-results.json | jq '.metadata.vulnerabilities.high // 0')
+            CRITICAL_VULNS=$(cat audit-results.json | jq '.metadata.vulnerabilities.critical // 0')
+            
+            echo "📊 Security Audit Results:"
+            echo "  High vulnerabilities: $HIGH_VULNS"
+            echo "  Critical vulnerabilities: $CRITICAL_VULNS"
+            
+            if [ "$CRITICAL_VULNS" -gt 0 ]; then
+              echo "❌ Critical vulnerabilities found! Please fix them before proceeding."
+              exit 1
+            elif [ "$HIGH_VULNS" -gt 0 ]; then
+              echo "⚠️ High vulnerabilities found. Consider fixing them."
+            else
+              echo "✅ No critical or high vulnerabilities found."
+            fi
+          fi
+
+  # Code quality analysis - runs after security (required)
+  code-quality:
+    runs-on: ubuntu-latest
+    needs: security
+    steps:
+      - name: 🔍 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🔨 Build project
+        run: npm run build
+
+      - name: 🔍 Run ESLint
+        run: npm run lint
+
+      - name: 🎨 Check code formatting
+        run: npm run format:check
+
+      - name: 📊 Run TypeScript type checking
+        run: npx tsc --noEmit
+
+      - name: 📈 Analyze code complexity
+        run: |
+          echo "🔍 Analyzing code complexity..."
+          npx complexity-report --format=json --output=complexity-report.json src/ || true
+          
+          if [ -f "complexity-report.json" ]; then
+            echo "📊 Code Complexity Analysis:"
+            cat complexity-report.json | jq '.summary' || echo "Complexity report generated"
+          fi
+
+  # Validate code quality on all pushes and PRs - runs after security and code-quality
   validate:
     runs-on: ubuntu-latest
+    needs: [security, code-quality]
     
     strategy:
       matrix:
@@ -213,13 +308,14 @@ jobs:
             echo "⚠️ Package size is quite large (>5MB)"
           fi
 
-  # Security and dependency checks
-  security:
+  # Compatibility testing
+  compatibility:
     runs-on: ubuntu-latest
+    needs: [security, code-quality]
     steps:
       - name: Check if run was cancelled
         run: |
-          echo "🔍 Security Job - CI Run Information:"
+          echo "🔍 Compatibility Job - CI Run Information:"
           echo "Workflow: ${{ github.workflow }}"
           echo "Ref: ${{ github.ref }}"
           echo "Branch: ${{ github.ref_name }}"
@@ -283,9 +379,12 @@ jobs:
           # This requires license-checker to be installed
           npx license-checker --summary || echo "License check skipped - license-checker not available"
 
-  # Code quality analysis
-  code-quality:
+  # Report results
+  report:
     runs-on: ubuntu-latest
+    needs: [validate, security, code-quality, compatibility]
+    if: always()
+    
     steps:
       - name: 🔍 Checkout code
         uses: actions/checkout@v4
