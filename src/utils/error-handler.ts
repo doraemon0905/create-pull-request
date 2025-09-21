@@ -71,3 +71,129 @@ export function createGitError(message: string): AppError {
 export function createValidationError(message: string): AppError {
   return new AppError(message, ERROR_CODES.VALIDATION_ERROR);
 }
+
+// Types for error details
+export interface ErrorDetails {
+  type: string;
+  statusCode?: number;
+  statusText?: string;
+  url?: string;
+  responseData?: any;
+  code?: string;
+  message?: string;
+}
+
+// Extended error interface
+export interface ExtendedError extends Error {
+  code?: string;
+  details?: any;
+}
+
+export function createError(message: string, code?: string, details?: any): ExtendedError {
+  const error = new Error(message) as ExtendedError;
+  if (code) error.code = code;
+  if (details) error.details = details;
+  return error;
+}
+
+export function isAxiosError(error: any): boolean {
+  return error && error.isAxiosError === true;
+}
+
+export function extractErrorDetails(error: any): ErrorDetails {
+  if (isAxiosError(error)) {
+    if (error.response) {
+      return {
+        type: 'HTTP_ERROR',
+        statusCode: error.response.status,
+        statusText: error.response.statusText,
+        url: error.config?.url,
+        responseData: error.response.data
+      };
+    } else {
+      return {
+        type: 'NETWORK_ERROR',
+        code: error.code,
+        url: error.config?.url,
+        message: error.message
+      };
+    }
+  } else if (error instanceof Error) {
+    const details: ErrorDetails = {
+      type: 'GENERIC_ERROR',
+      message: error.message
+    };
+    if ((error as ExtendedError).code) {
+      details.code = (error as ExtendedError).code;
+    }
+    return details;
+  } else if (error) {
+    return {
+      type: 'UNKNOWN_ERROR',
+      message: String(error)
+    };
+  } else {
+    return {
+      type: 'UNKNOWN_ERROR',
+      message: 'Unknown error occurred'
+    };
+  }
+}
+
+export function formatErrorMessage(error: any): string {
+  if (!error) {
+    return 'Unknown error occurred';
+  }
+
+  if (typeof error === 'string') {
+    return error || 'Unknown error occurred';
+  }
+
+  const details = extractErrorDetails(error);
+
+  switch (details.type) {
+    case 'HTTP_ERROR':
+      let message = `HTTP Error (${details.statusCode})`;
+      if (details.responseData?.message) {
+        message += `: ${details.responseData.message}`;
+      } else if (details.statusText) {
+        message += `: ${details.statusText}`;
+      }
+      if (details.url) {
+        message += ` [${details.url}]`;
+      }
+      return message;
+
+    case 'NETWORK_ERROR':
+      let netMessage = details.message || 'Network Error';
+      if (details.code) {
+        netMessage += ` (${details.code})`;
+      }
+      return netMessage;
+
+    case 'GENERIC_ERROR':
+      let genMessage = details.message || 'Error occurred';
+      if (details.code) {
+        genMessage += ` [${details.code}]`;
+      }
+      return genMessage;
+
+    default:
+      return details.message || 'Unknown error occurred';
+  }
+}
+
+// Update handleError to accept prefix and not exit process (for testing)
+export function handleError(error: unknown, prefix: string = ''): never {
+  const formattedMessage = formatErrorMessage(error);
+  const logPrefix = prefix ? `${prefix} Error:` : 'Error:';
+  
+  console.error(logPrefix, formattedMessage);
+  
+  // Re-throw the original error to preserve stack trace and type
+  if (error instanceof Error) {
+    throw error;
+  } else {
+    throw new Error(formattedMessage);
+  }
+}

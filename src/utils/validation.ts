@@ -63,3 +63,30 @@ export function validateGitRepository(): void {
     throw new Error('Not in a git repository. Please run this command from within a git repository.');
   }
 }
+
+export function validateGitHubUrl(url: string): boolean {
+  if (!url || typeof url !== 'string') {
+    return false;
+  }
+  return REGEX_PATTERNS.GITHUB_URL.test(url);
+}
+
+export function validateEmail(email: string): boolean {
+  if (!email || typeof email !== 'string') {
+    return false;
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+export function sanitizeInput(input: string): string {
+  if (!input || typeof input !== 'string') {
+    return '';
+  }
+  
+  return input
+    .replace(/[<>]/g, '') // Remove potential HTML tags
+    .replace(/[&"']/g, '') // Remove potentially dangerous characters
+    .replace(/[\r\n\t]/g, ' ') // Replace newlines and tabs with spaces
+    .trim(); // Remove leading/trailing whitespace
+}

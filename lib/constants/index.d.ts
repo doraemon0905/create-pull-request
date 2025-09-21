@@ -31,11 +31,11 @@ export declare const HTTP_STATUS: {
 export declare const CONFIG: {
     readonly DIRECTORY_NAME: ".create-pr";
     readonly FILE_NAME: "env-config.json";
-    readonly VERSION: "1.1.0";
+    readonly VERSION: string;
     readonly DEFAULT_BRANCH: "main";
     readonly DEFAULT_REMOTE: "origin";
     readonly CLI_NAME: "create-pr";
-    readonly CLI_VERSION: "1.0.0";
+    readonly CLI_VERSION: string;
 };
 export declare const FILE_PATHS: {
     readonly PR_TEMPLATE_PATHS: readonly [".github/pull_request_template.md", ".github/PULL_REQUEST_TEMPLATE.md", "pull_request_template.md", "PULL_REQUEST_TEMPLATE.md", ".github/PULL_REQUEST_TEMPLATE/default.md"];

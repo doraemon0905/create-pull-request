@@ -1,3 +1,19 @@
+// Load package.json to get dynamic version
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Function to get version from package.json
+function getPackageVersion(): string {
+  try {
+    const packageJsonPath = path.join(__dirname, '../../package.json');
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+    return packageJson.version || '1.0.0';
+  } catch (error) {
+    // Fallback version if package.json can't be read
+    return '1.0.0';
+  }
+}
+
 // API Configuration
 export const API_URLS = {
   CLAUDE_BASE_URL: 'https://api.anthropic.com',
@@ -40,11 +56,11 @@ export const HTTP_STATUS = {
 export const CONFIG = {
   DIRECTORY_NAME: '.create-pr',
   FILE_NAME: 'env-config.json',
-  VERSION: '1.1.0',
+  VERSION: getPackageVersion(),
   DEFAULT_BRANCH: 'main',
   DEFAULT_REMOTE: 'origin',
   CLI_NAME: 'create-pr',
-  CLI_VERSION: '1.0.0'
+  CLI_VERSION: getPackageVersion()
 } as const;
 
 // File System
