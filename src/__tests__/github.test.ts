@@ -48,7 +48,8 @@ describe('GitHubService', () => {
   describe('constructor', () => {
     it('should initialize with GitHub token', () => {
       expect(MockedOctokit).toHaveBeenCalledWith({
-        auth: 'test-token'
+        auth: 'test-token',
+        userAgent: 'create-pr-cli'
       });
     });
 
@@ -97,7 +98,7 @@ describe('GitHubService', () => {
       const mockGit = {
         getRemotes: jest.fn().mockResolvedValue(mockRemotes)
       };
-      
+
       (githubService as any).git = mockGit;
 
       const result = await githubService.getCurrentRepo();
@@ -114,7 +115,7 @@ describe('GitHubService', () => {
       const mockGit = {
         getRemotes: jest.fn().mockResolvedValue([])
       };
-      
+
       (githubService as any).git = mockGit;
 
       await expect(githubService.getCurrentRepo()).rejects.toThrow(
@@ -135,7 +136,7 @@ describe('GitHubService', () => {
       const mockGit = {
         getRemotes: jest.fn().mockResolvedValue(mockRemotes)
       };
-      
+
       (githubService as any).git = mockGit;
 
       await expect(githubService.getCurrentRepo()).rejects.toThrow(
@@ -235,7 +236,7 @@ describe('GitHubService', () => {
           current: 'feature/test-branch'
         })
       };
-      
+
       (githubService as any).git = mockGit;
 
       const result = await githubService.getCurrentBranch();
@@ -247,7 +248,7 @@ describe('GitHubService', () => {
       const mockGit = {
         branch: jest.fn().mockRejectedValue(new Error('Git error'))
       };
-      
+
       (githubService as any).git = mockGit;
 
       await expect(githubService.getCurrentBranch()).rejects.toThrow(
@@ -264,7 +265,7 @@ describe('GitHubService', () => {
 
     it('should get pull request templates successfully', async () => {
       const mockContent = Buffer.from('## Description\n{{description}}').toString('base64');
-      
+
       mockOctokit.rest.repos.getContent.mockResolvedValueOnce({
         data: {
           type: 'file',

@@ -63,9 +63,11 @@ describe('AIDescriptionGeneratorService', () => {
     }
   };
 
+  let mockAxiosInstance: any;
+
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Mock config responses
     mockedGetConfig.mockImplementation((section: any) => {
       switch (section) {
@@ -84,13 +86,26 @@ describe('AIDescriptionGeneratorService', () => {
       }
     });
 
-    // Mock axios.create
-    const mockAxiosInstance = {
+    // Default mock for axios.create
+    mockAxiosInstance = {
       post: jest.fn(),
       defaults: { timeout: 30000 }
     };
     mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
 
+    // Ensure all axios.create calls return the same mock instance
+    mockedAxios.create.mockImplementation(() => mockAxiosInstance as any);
+  });
+
+  beforeEach(() => {
+    // Reset all mocks before each test
+    jest.clearAllMocks();
+    mockAxiosInstance.post.mockClear();
+
+    // Re-setup axios mock after clearing
+    mockedAxios.create.mockImplementation(() => mockAxiosInstance as any);
+
+    // Create service instance for each test
     service = new AIDescriptionGeneratorService();
   });
 
@@ -105,16 +120,7 @@ describe('AIDescriptionGeneratorService', () => {
       const mockResponse = {
         content: [{ text: '{"title": "PROJ-123: Test feature implementation", "body": "## Summary\\nImplemented new test feature"}' }]
       };
-
-      // Use the existing mocked instance, don't create a new one
-      const mockAxiosInstance = {
-        post: jest.fn().mockResolvedValue({ data: mockResponse }),
-        defaults: { timeout: 30000 }
-      };
-      mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
-      
-      // Recreate service to use the new mock
-      service = new AIDescriptionGeneratorService();
+      mockAxiosInstance.post.mockResolvedValue({ data: mockResponse });
 
       const result = await service.generatePRDescription(mockOptions);
 
@@ -123,8 +129,10 @@ describe('AIDescriptionGeneratorService', () => {
     });
 
     it('should fallback to ChatGPT when Claude fails', async () => {
+      // Claude fails, ChatGPT succeeds
       const mockClaudeInstance = {
-        post: jest.fn().mockRejectedValue(new Error('Claude API error'))
+        post: jest.fn().mockRejectedValue(new Error('Claude API error')),
+        defaults: { timeout: 30000 }
       };
       const mockChatGPTInstance = {
         post: jest.fn().mockResolvedValue({
@@ -135,13 +143,20 @@ describe('AIDescriptionGeneratorService', () => {
               }
             }]
           }
-        })
+        }),
+        defaults: { timeout: 30000 }
+      };
+      const mockGeminiInstance = {
+        post: jest.fn(),
+        defaults: { timeout: 30000 }
       };
 
+      // Mock the order of create calls for providers
       mockedAxios.create
         .mockReturnValueOnce(mockClaudeInstance as any)
         .mockReturnValueOnce(mockChatGPTInstance as any)
-        .mockReturnValueOnce({} as any); // Gemini instance
+        .mockReturnValueOnce(mockGeminiInstance as any)
+        .mockReturnValue({} as any);
 
       service = new AIDescriptionGeneratorService();
 
@@ -155,16 +170,7 @@ describe('AIDescriptionGeneratorService', () => {
       const mockResponse = {
         content: [{ text: 'Invalid JSON response' }]
       };
-
-      // Mock the axios instance to return the expected response
-      const mockAxiosInstance = {
-        post: jest.fn().mockResolvedValue({ data: mockResponse }),
-        defaults: { timeout: 30000 }
-      };
-      mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
-      
-      // Recreate service to use the new mock
-      service = new AIDescriptionGeneratorService();
+      mockAxiosInstance.post.mockResolvedValue({ data: mockResponse });
 
       const result = await service.generatePRDescription(mockOptions);
 
@@ -173,16 +179,156 @@ describe('AIDescriptionGeneratorService', () => {
     });
 
     it('should use fallback description when all AI providers fail', async () => {
-      const mockFailedInstance = {
-        post: jest.fn().mockRejectedValue(new Error('API error'))
+      mockAxiosInstance.post.mockRejectedValue(new Error('API error'));
+
+      const result = await service.generatePRDescription(mockOptions);
+
+      expect(result.title).toContain('PROJ-123');
+      expect(result.body).toContain('Summary');
+    });
+
+    it('should handle ChatGPT API returning undefined data gracefully', async () => {
+      // Claude fails, ChatGPT returns undefined data
+      const mockClaudeInstance = {
+        post: jest.fn().mockRejectedValue(new Error('Claude API error')),
+        defaults: { timeout: 30000 }
+      };
+      const mockChatGPTInstance = {
+        post: jest.fn().mockResolvedValue({}), // No data property
+        defaults: { timeout: 30000 }
+      };
+      const mockGeminiInstance = {
+        post: jest.fn().mockRejectedValue(new Error('Gemini API error')),
+        defaults: { timeout: 30000 }
+      };
+      const mockCopilotInstance = {
+        post: jest.fn().mockResolvedValue({}), // No data property
+        defaults: { timeout: 30000 }
       };
 
-      mockedAxios.create.mockReturnValue(mockFailedInstance as any);
+      mockedAxios.create
+        .mockReturnValueOnce(mockClaudeInstance as any)
+        .mockReturnValueOnce(mockChatGPTInstance as any)
+        .mockReturnValueOnce(mockGeminiInstance as any)
+        .mockReturnValueOnce(mockCopilotInstance as any)
+        .mockReturnValue({} as any);
 
       service = new AIDescriptionGeneratorService();
 
       const result = await service.generatePRDescription(mockOptions);
 
+      // Should fallback to template-based or default description, not throw
+      expect(result).toBeDefined();
+      expect(result.title).toContain('PROJ-123');
+      expect(result.body).toContain('Summary');
+    });
+
+    it('should handle ChatGPT API returning data but missing choices gracefully', async () => {
+      // Claude fails, ChatGPT returns data but no choices
+      const mockClaudeInstance = {
+        post: jest.fn().mockRejectedValue(new Error('Claude API error')),
+        defaults: { timeout: 30000 }
+      };
+      const mockChatGPTInstance = {
+        post: jest.fn().mockResolvedValue({ data: {} }), // data exists, but no choices
+        defaults: { timeout: 30000 }
+      };
+      const mockGeminiInstance = {
+        post: jest.fn().mockRejectedValue(new Error('Gemini API error')),
+        defaults: { timeout: 30000 }
+      };
+      const mockCopilotInstance = {
+        post: jest.fn().mockResolvedValue({}), // No data property
+        defaults: { timeout: 30000 }
+      };
+
+      mockedAxios.create
+        .mockReturnValueOnce(mockClaudeInstance as any)
+        .mockReturnValueOnce(mockChatGPTInstance as any)
+        .mockReturnValueOnce(mockGeminiInstance as any)
+        .mockReturnValueOnce(mockCopilotInstance as any)
+        .mockReturnValue({} as any);
+
+      service = new AIDescriptionGeneratorService();
+
+      const result = await service.generatePRDescription(mockOptions);
+
+      // Should fallback to template-based or default description, not throw
+      expect(result).toBeDefined();
+      expect(result.title).toContain('PROJ-123');
+      expect(result.body).toContain('Summary');
+    });
+
+    it('should handle Copilot API returning undefined data gracefully', async () => {
+      // All providers fail or return undefined data, including Copilot
+      const mockClaudeInstance = {
+        post: jest.fn().mockRejectedValue(new Error('Claude API error')),
+        defaults: { timeout: 30000 }
+      };
+      const mockChatGPTInstance = {
+        post: jest.fn().mockRejectedValue(new Error('ChatGPT API error')),
+        defaults: { timeout: 30000 }
+      };
+      const mockGeminiInstance = {
+        post: jest.fn().mockRejectedValue(new Error('Gemini API error')),
+        defaults: { timeout: 30000 }
+      };
+      // Patch: Copilot returns { data: undefined } instead of {}
+      const mockCopilotInstance = {
+        post: jest.fn().mockResolvedValue({ data: undefined }),
+        defaults: { timeout: 30000 }
+      };
+
+      mockedAxios.create
+        .mockReturnValueOnce(mockClaudeInstance as any)
+        .mockReturnValueOnce(mockChatGPTInstance as any)
+        .mockReturnValueOnce(mockGeminiInstance as any)
+        .mockReturnValueOnce(mockCopilotInstance as any)
+        .mockReturnValue({} as any);
+
+      service = new AIDescriptionGeneratorService();
+
+      const result = await service.generatePRDescription(mockOptions);
+
+      // Should fallback to template-based or default description, not throw
+      expect(result).toBeDefined();
+      expect(result.title).toContain('PROJ-123');
+      expect(result.body).toContain('Summary');
+    });
+
+    it('should handle Copilot API returning data but missing choices gracefully', async () => {
+      // All providers fail or return data with missing expected fields, including Copilot
+      const mockClaudeInstance = {
+        post: jest.fn().mockRejectedValue(new Error('Claude API error')),
+        defaults: { timeout: 30000 }
+      };
+      const mockChatGPTInstance = {
+        post: jest.fn().mockRejectedValue(new Error('ChatGPT API error')),
+        defaults: { timeout: 30000 }
+      };
+      const mockGeminiInstance = {
+        post: jest.fn().mockRejectedValue(new Error('Gemini API error')),
+        defaults: { timeout: 30000 }
+      };
+      // Patch: Copilot returns { data: undefined } instead of { data: {} }
+      const mockCopilotInstance = {
+        post: jest.fn().mockResolvedValue({ data: undefined }),
+        defaults: { timeout: 30000 }
+      };
+
+      mockedAxios.create
+        .mockReturnValueOnce(mockClaudeInstance as any)
+        .mockReturnValueOnce(mockChatGPTInstance as any)
+        .mockReturnValueOnce(mockGeminiInstance as any)
+        .mockReturnValueOnce(mockCopilotInstance as any)
+        .mockReturnValue({} as any);
+
+      service = new AIDescriptionGeneratorService();
+
+      const result = await service.generatePRDescription(mockOptions);
+
+      // Should fallback to template-based or default description, not throw
+      expect(result).toBeDefined();
       expect(result.title).toContain('PROJ-123');
       expect(result.body).toContain('Summary');
     });
@@ -195,10 +341,12 @@ describe('AIDescriptionGeneratorService', () => {
           data: {
             content: [{ text: '{"title": "Test", "body": "Test body"}' }]
           }
-        })
+        }),
+        defaults: { timeout: 30000 }
       };
 
-      mockedAxios.create.mockReturnValue(mockClaudeInstance as any);
+      mockedAxios.create.mockReturnValueOnce(mockClaudeInstance as any)
+        .mockReturnValue({} as any);
 
       service = new AIDescriptionGeneratorService();
       await service.generatePRDescription(mockOptions);
@@ -237,10 +385,12 @@ describe('AIDescriptionGeneratorService', () => {
               }
             }]
           }
-        })
+        }),
+        defaults: { timeout: 30000 }
       };
 
-      mockedAxios.create.mockReturnValue(mockChatGPTInstance as any);
+      mockedAxios.create.mockReturnValueOnce(mockChatGPTInstance as any)
+        .mockReturnValue({} as any);
 
       service = new AIDescriptionGeneratorService();
       await service.generatePRDescription(mockOptions);
@@ -255,6 +405,60 @@ describe('AIDescriptionGeneratorService', () => {
           })
         ])
       }));
+    });
+
+    it('should handle ChatGPT API returning undefined data gracefully', async () => {
+      // Only OpenAI configured
+      mockedGetConfig.mockImplementation((section: any) => {
+        switch (section) {
+          case 'aiProviders':
+            return { openai: { apiKey: 'openai-key', model: 'gpt-4o' } };
+          default:
+            return {};
+        }
+      });
+
+      const mockChatGPTInstance = {
+        post: jest.fn().mockResolvedValue({}), // No data property
+        defaults: { timeout: 30000 }
+      };
+
+      mockedAxios.create.mockReturnValueOnce(mockChatGPTInstance as any)
+        .mockReturnValue({} as any);
+
+      service = new AIDescriptionGeneratorService();
+      const result = await service.generatePRDescription(mockOptions);
+
+      expect(result).toBeDefined();
+      expect(result.title).toContain('PROJ-123');
+      expect(result.body).toContain('Summary');
+    });
+
+    it('should handle ChatGPT API returning data but missing choices gracefully', async () => {
+      // Only OpenAI configured
+      mockedGetConfig.mockImplementation((section: any) => {
+        switch (section) {
+          case 'aiProviders':
+            return { openai: { apiKey: 'openai-key', model: 'gpt-4o' } };
+          default:
+            return {};
+        }
+      });
+
+      const mockChatGPTInstance = {
+        post: jest.fn().mockResolvedValue({ data: {} }), // data exists, but no choices
+        defaults: { timeout: 30000 }
+      };
+
+      mockedAxios.create.mockReturnValueOnce(mockChatGPTInstance as any)
+        .mockReturnValue({} as any);
+
+      service = new AIDescriptionGeneratorService();
+      const result = await service.generatePRDescription(mockOptions);
+
+      expect(result).toBeDefined();
+      expect(result.title).toContain('PROJ-123');
+      expect(result.body).toContain('Summary');
     });
   });
 
@@ -281,10 +485,12 @@ describe('AIDescriptionGeneratorService', () => {
               }
             }]
           }
-        })
+        }),
+        defaults: { timeout: 30000 }
       };
 
-      mockedAxios.create.mockReturnValue(mockGeminiInstance as any);
+      mockedAxios.create.mockReturnValueOnce(mockGeminiInstance as any)
+        .mockReturnValue({} as any);
 
       service = new AIDescriptionGeneratorService();
       await service.generatePRDescription(mockOptions);
@@ -309,6 +515,76 @@ describe('AIDescriptionGeneratorService', () => {
     });
   });
 
+  describe('Copilot API integration', () => {
+    it('should handle Copilot API returning undefined data gracefully', async () => {
+      // Only Copilot configured
+      mockedGetConfig.mockImplementation((section: any) => {
+        switch (section) {
+          case 'aiProviders':
+            return {};
+          case 'copilot':
+            return { apiToken: 'copilot-token' };
+          default:
+            return {};
+        }
+      });
+
+      // Patch: Copilot returns { data: undefined } instead of {}
+      const mockCopilotInstance = {
+        post: jest.fn().mockResolvedValue({ data: undefined }),
+        defaults: { timeout: 30000 }
+      };
+
+      mockedAxios.create
+        .mockReturnValueOnce({} as any) // Claude
+        .mockReturnValueOnce({} as any) // ChatGPT
+        .mockReturnValueOnce({} as any) // Gemini
+        .mockReturnValueOnce(mockCopilotInstance as any)
+        .mockReturnValue({} as any);
+
+      service = new AIDescriptionGeneratorService();
+      const result = await service.generatePRDescription(mockOptions);
+
+      expect(result).toBeDefined();
+      expect(result.title).toContain('PROJ-123');
+      expect(result.body).toContain('Summary');
+    });
+
+    it('should handle Copilot API returning data but missing expected fields gracefully', async () => {
+      // Only Copilot configured
+      mockedGetConfig.mockImplementation((section: any) => {
+        switch (section) {
+          case 'aiProviders':
+            return {};
+          case 'copilot':
+            return { apiToken: 'copilot-token' };
+          default:
+            return {};
+        }
+      });
+
+      // Patch: Copilot returns { data: undefined } instead of { data: {} }
+      const mockCopilotInstance = {
+        post: jest.fn().mockResolvedValue({ data: undefined }),
+        defaults: { timeout: 30000 }
+      };
+
+      mockedAxios.create
+        .mockReturnValueOnce({} as any) // Claude
+        .mockReturnValueOnce({} as any) // ChatGPT
+        .mockReturnValueOnce({} as any) // Gemini
+        .mockReturnValueOnce(mockCopilotInstance as any)
+        .mockReturnValue({} as any);
+
+      service = new AIDescriptionGeneratorService();
+      const result = await service.generatePRDescription(mockOptions);
+
+      expect(result).toBeDefined();
+      expect(result.title).toContain('PROJ-123');
+      expect(result.body).toContain('Summary');
+    });
+  });
+
   describe('Error handling', () => {
     it('should throw error when no AI providers are configured', () => {
       mockedGetConfig.mockImplementation(() => ({}));
@@ -317,13 +593,7 @@ describe('AIDescriptionGeneratorService', () => {
     });
 
     it('should handle network errors gracefully', async () => {
-      const mockInstance = {
-        post: jest.fn().mockRejectedValue(new Error('Network error'))
-      };
-
-      mockedAxios.create.mockReturnValue(mockInstance as any);
-
-      service = new AIDescriptionGeneratorService();
+      mockAxiosInstance.post.mockRejectedValue(new Error('Network error'));
 
       const result = await service.generatePRDescription(mockOptions);
 
@@ -347,15 +617,7 @@ describe('AIDescriptionGeneratorService', () => {
         content: [{ text: '{"title": "PROJ-123: Test", "body": "## Description\\nTest content\\n\\n## Testing\\n- [ ] Manual testing"}' }]
       };
 
-      // Mock the axios instance to return the expected response
-      const mockAxiosInstance = {
-        post: jest.fn().mockResolvedValue({ data: mockResponse }),
-        defaults: { timeout: 30000 }
-      };
-      mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
-      
-      // Recreate service to use the new mock
-      service = new AIDescriptionGeneratorService();
+      mockAxiosInstance.post.mockResolvedValue({ data: mockResponse });
 
       const result = await service.generatePRDescription(optionsWithTemplate);
 
@@ -367,20 +629,12 @@ describe('AIDescriptionGeneratorService', () => {
   describe('Response parsing', () => {
     it('should parse valid JSON response correctly', async () => {
       const mockResponse = {
-        content: [{ 
+        content: [{
           text: '{"title": "PROJ-123: Valid JSON", "body": "## Summary\\nValid JSON response"}'
         }]
       };
 
-      // Mock the axios instance to return the expected response
-      const mockAxiosInstance = {
-        post: jest.fn().mockResolvedValue({ data: mockResponse }),
-        defaults: { timeout: 30000 }
-      };
-      mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
-      
-      // Recreate service to use the new mock
-      service = new AIDescriptionGeneratorService();
+      mockAxiosInstance.post.mockResolvedValue({ data: mockResponse });
 
       const result = await service.generatePRDescription(mockOptions);
 
@@ -390,20 +644,12 @@ describe('AIDescriptionGeneratorService', () => {
 
     it('should handle JSON wrapped in markdown code blocks', async () => {
       const mockResponse = {
-        content: [{ 
+        content: [{
           text: '```json\n{"title": "PROJ-123: Markdown JSON", "body": "## Summary\\nJSON in markdown"}\n```'
         }]
       };
 
-      // Mock the axios instance to return the expected response
-      const mockAxiosInstance = {
-        post: jest.fn().mockResolvedValue({ data: mockResponse }),
-        defaults: { timeout: 30000 }
-      };
-      mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
-      
-      // Recreate service to use the new mock
-      service = new AIDescriptionGeneratorService();
+      mockAxiosInstance.post.mockResolvedValue({ data: mockResponse });
 
       const result = await service.generatePRDescription(mockOptions);
 
@@ -413,20 +659,12 @@ describe('AIDescriptionGeneratorService', () => {
 
     it('should extract title from non-JSON response', async () => {
       const mockResponse = {
-        content: [{ 
+        content: [{
           text: 'Title: PROJ-123: Extracted Title\n\nThis is the body content'
         }]
       };
 
-      // Mock the axios instance to return the expected response
-      const mockAxiosInstance = {
-        post: jest.fn().mockResolvedValue({ data: mockResponse }),
-        defaults: { timeout: 30000 }
-      };
-      mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
-      
-      // Recreate service to use the new mock
-      service = new AIDescriptionGeneratorService();
+      mockAxiosInstance.post.mockResolvedValue({ data: mockResponse });
 
       const result = await service.generatePRDescription(mockOptions);
 

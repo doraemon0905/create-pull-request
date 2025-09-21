@@ -1,5 +1,8 @@
 import { createPullRequest, CreatePROptions } from '../commands/create-pr';
 import { GitService } from '../services/git';
+import { GitHubService } from '../services/github';
+import { JiraService } from '../services/jira';
+import { AIDescriptionGeneratorService } from '../services/ai-description-generator';
 import { validateConfig } from '../utils/config';
 
 // Mock dependencies
@@ -8,7 +11,12 @@ jest.mock('../services/git');
 jest.mock('../services/github');
 jest.mock('../services/ai-description-generator');
 jest.mock('../utils/config');
-jest.mock('inquirer');
+jest.mock('inquirer', () => ({
+  __esModule: true,
+  default: {
+    prompt: jest.fn()
+  }
+}));
 jest.mock('ora', () => ({
   __esModule: true,
   default: () => ({
@@ -21,7 +29,22 @@ jest.mock('ora', () => ({
 }));
 
 const mockGitService = new GitService() as jest.Mocked<GitService>;
+const mockGitHubService = new GitHubService() as jest.Mocked<GitHubService>;
+const mockJiraService = new JiraService() as jest.Mocked<JiraService>;
+const mockAIDescriptionService = new AIDescriptionGeneratorService() as jest.Mocked<AIDescriptionGeneratorService>;
 const mockValidateConfig = validateConfig as jest.MockedFunction<typeof validateConfig>;
+
+// Mock the GitService constructor to return our mock instance
+(GitService as jest.MockedClass<typeof GitService>).mockImplementation(() => mockGitService);
+
+// Mock the GitHubService constructor to return our mock instance
+(GitHubService as jest.MockedClass<typeof GitHubService>).mockImplementation(() => mockGitHubService);
+
+// Mock the JiraService constructor to return our mock instance
+(JiraService as jest.MockedClass<typeof JiraService>).mockImplementation(() => mockJiraService);
+
+// Mock the AIDescriptionGeneratorService constructor to return our mock instance
+(AIDescriptionGeneratorService as jest.MockedClass<typeof AIDescriptionGeneratorService>).mockImplementation(() => mockAIDescriptionService);
 
 describe('Create PR Command', () => {
   beforeEach(() => {
@@ -31,6 +54,10 @@ describe('Create PR Command', () => {
     // Mock console methods
     jest.spyOn(console, 'log').mockImplementation();
     jest.spyOn(console, 'error').mockImplementation();
+
+    // Mock inquirer
+    const inquirer = require('inquirer');
+    inquirer.default.prompt.mockResolvedValue({ action: 'create' });
   });
 
   afterEach(() => {
@@ -61,6 +88,16 @@ describe('Create PR Command', () => {
       mockGitService.getCurrentBranch = jest.fn().mockResolvedValue('feature/PROJ-123');
       mockGitService.hasUncommittedChanges = jest.fn().mockResolvedValue(false);
       mockGitService.branchExists = jest.fn().mockResolvedValue(true); // Mock that 'main' branch exists
+      mockGitService.getChanges = jest.fn().mockResolvedValue({
+        totalFiles: 2,
+        totalInsertions: 10,
+        totalDeletions: 5,
+        files: []
+      });
+      mockGitHubService.getCurrentRepo = jest.fn().mockResolvedValue({ owner: 'test-owner', repo: 'test-repo' });
+      mockGitHubService.getPullRequestTemplates = jest.fn().mockResolvedValue([]);
+      mockJiraService.getTicket = jest.fn().mockResolvedValue({ key: 'PROJ-123', summary: 'Test ticket' });
+      mockAIDescriptionService.generatePRDescription = jest.fn().mockResolvedValue({ title: 'Test PR', body: 'Test body' });
 
       // Test should not throw for dry run
       await expect(createPullRequest(dryRunOptions)).resolves.toBeUndefined();

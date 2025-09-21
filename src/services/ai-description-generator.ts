@@ -274,7 +274,7 @@ export class AIDescriptionGeneratorService {
           ? file.diffContent.substring(0, LIMITS.MAX_DIFF_CONTENT_LENGTH * 2) + '\n... (diff truncated for brevity)'
           : file.diffContent;
         summaryPrompt += `- Full code diff:\n\`\`\`diff\n${truncatedDiff}\n\`\`\`\n`;
-        
+
         // Extract key changes from the diff for better AI understanding
         const diffSummary = this.extractDiffSummary(file.diffContent);
         if (diffSummary.length > 0) {
@@ -287,13 +287,13 @@ export class AIDescriptionGeneratorService {
 
     if (diffContent) {
       summaryPrompt += `\n## Overall Code Changes:\n`;
-      
+
       // Provide the full diff with length limits
       const truncatedOverallDiff = diffContent.length > LIMITS.MAX_OVERALL_DIFF_LENGTH
         ? diffContent.substring(0, LIMITS.MAX_OVERALL_DIFF_LENGTH) + '\n... (overall diff truncated for brevity)'
         : diffContent;
       summaryPrompt += `\`\`\`diff\n${truncatedOverallDiff}\n\`\`\`\n`;
-      
+
       // Extract and provide high-level diff insights
       const overallDiffSummary = this.extractDiffSummary(diffContent);
       if (overallDiffSummary.length > 0) {
@@ -649,7 +649,7 @@ export class AIDescriptionGeneratorService {
 
   private getModelForProvider(provider: AIProvider): string {
     const aiProvidersConfig = this.getAIProvidersConfig();
-    
+
     switch (provider) {
       case 'claude':
         return aiProvidersConfig?.claude?.model || process.env.CLAUDE_MODEL || DEFAULT_MODELS.CLAUDE;
@@ -695,7 +695,7 @@ export class AIDescriptionGeneratorService {
       ]
     });
 
-    if (!response.data.content?.[0]?.text) {
+    if (!response.data || !response.data.content?.[0]?.text) {
       throw new Error('No content received from Claude API');
     }
 
@@ -716,7 +716,7 @@ export class AIDescriptionGeneratorService {
       ]
     });
 
-    if (!response.data.choices[0]?.message?.content) {
+    if (!response.data || !response.data.choices?.[0]?.message?.content) {
       throw new Error('No content received from ChatGPT API');
     }
 
@@ -739,7 +739,7 @@ export class AIDescriptionGeneratorService {
       }
     });
 
-    if (!response.data.candidates?.[0]?.content?.parts?.[0]?.text) {
+    if (!response.data || !response.data.candidates?.[0]?.content?.parts?.[0]?.text) {
       throw new Error('No content received from Gemini API');
     }
 
@@ -760,7 +760,7 @@ export class AIDescriptionGeneratorService {
       ]
     });
 
-    if (!response.data.choices[0]?.message?.content) {
+    if (!response.data || !response.data.choices?.[0]?.message?.content) {
       throw new Error('No content received from Copilot API');
     }
 
@@ -1122,10 +1122,10 @@ export class AIDescriptionGeneratorService {
   private extractDiffSummary(diffContent: string): string[] {
     const summary: string[] = [];
     const lines = diffContent.split('\n');
-    
+
     let addedLines = 0;
     let removedLines = 0;
-    
+
     for (const line of lines) {
       // Track function/method/class context
       if (line.match(/^[+-]\s*(function|def|class|interface|export|import|const|let|var)/)) {
@@ -1139,7 +1139,7 @@ export class AIDescriptionGeneratorService {
           }
         }
       }
-      
+
       // Track significant code changes
       if (line.startsWith('+') && !line.startsWith('+++')) {
         addedLines++;
@@ -1156,7 +1156,7 @@ export class AIDescriptionGeneratorService {
           summary.push(`Removed logic: ${codeLine}`);
         }
       }
-      
+
       // Capture import/export changes
       if (line.match(/^[+-]\s*(import|export)/)) {
         const match = line.match(/^[+-]\s*(.*)/);
@@ -1169,7 +1169,7 @@ export class AIDescriptionGeneratorService {
           }
         }
       }
-      
+
       // Capture configuration or constant changes
       if (line.match(/^[+-]\s*.*[=:]\s*(true|false|null|undefined|\d+|['"][^'"]*['"])/)) {
         const match = line.match(/^[+-]\s*(.*)/);
@@ -1183,12 +1183,12 @@ export class AIDescriptionGeneratorService {
         }
       }
     }
-    
+
     // Add summary statistics if significant changes
     if (addedLines > 10 || removedLines > 10) {
       summary.unshift(`Major changes: +${addedLines} lines, -${removedLines} lines`);
     }
-    
+
     // Limit to most important changes to avoid overwhelming the AI
     return summary.slice(0, 8);
   }
