@@ -395,29 +395,53 @@ jobs:
   # Trigger SonarCloud analysis when all CI jobs pass
   trigger-sonarcloud:
     runs-on: ubuntu-latest
-    needs: [validate, security, code-quality, compatibility]
+    needs: [validate, security, code-quality, compatibility, report]
     if: |
       needs.validate.result == 'success' && 
       needs.security.result == 'success' && 
       needs.code-quality.result == 'success' && 
-      needs.compatibility.result == 'success'
+      needs.compatibility.result == 'success' &&
+      needs.report.result == 'success'
+    
+    permissions:
+      actions: write
+      contents: read
     
     steps:
       - name: 🚀 Trigger SonarCloud Analysis
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.GH_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
             const ref = context.ref;
             
             console.log(`🚀 Triggering SonarCloud analysis for ${owner}/${repo}@${ref}`);
+            console.log(`📊 All CI jobs completed successfully, including report job`);
+            console.log(`🔑 Using token with permissions: actions:write, contents:read`);
             
             try {
-              // Trigger the SonarCloud workflow
-              await github.rest.actions.createWorkflowDispatch({
+              // First, let's check if the workflow exists
+              console.log('🔍 Checking if SonarCloud workflow exists...');
+              const workflows = await github.rest.actions.listWorkflowsForRepo({
+                owner,
+                repo
+              });
+              
+              const sonarWorkflow = workflows.data.workflows.find(w => w.name === 'SonarCloud Analysis');
+              if (!sonarWorkflow) {
+                console.log('❌ SonarCloud Analysis workflow not found');
+                console.log('📋 Available workflows:', workflows.data.workflows.map(w => w.name));
+                return;
+              }
+              
+              console.log(`✅ Found SonarCloud workflow: ${sonarWorkflow.name} (ID: ${sonarWorkflow.id})`);
+              
+              // Try to trigger the SonarCloud workflow using workflow_dispatch
+              const response = await github.rest.actions.createWorkflowDispatch({
                 owner,
                 repo,
-                workflow_id: 'SonarCloud Analysis',
+                workflow_id: sonarWorkflow.id,
                 ref: ref,
                 inputs: {
                   triggered_by: 'ci-pipeline',
@@ -426,7 +450,31 @@ jobs:
               });
               
               console.log('✅ SonarCloud workflow triggered successfully');
+              console.log(`📋 Response status: ${response.status}`);
             } catch (error) {
               console.error('❌ Failed to trigger SonarCloud workflow:', error.message);
-              throw error;
+              console.error('🔍 Error details:', {
+                status: error.status,
+                response: error.response?.data,
+                url: error.request?.url
+              });
+              
+              // Try alternative approach: create a repository dispatch event
+              console.log('🔄 Trying alternative approach with repository dispatch...');
+              try {
+                await github.rest.repos.createDispatchEvent({
+                  owner,
+                  repo,
+                  event_type: 'sonarcloud-trigger',
+                  client_payload: {
+                    triggered_by: 'ci-pipeline',
+                    ci_run_id: context.runId,
+                    ref: ref
+                  }
+                });
+                console.log('✅ Repository dispatch event created successfully');
+              } catch (dispatchError) {
+                console.error('❌ Repository dispatch also failed:', dispatchError.message);
+                console.log('⚠️ Continuing without SonarCloud analysis...');
+              }
             }

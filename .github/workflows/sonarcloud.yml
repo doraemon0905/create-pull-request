@@ -16,6 +16,8 @@ on:
         description: 'CI run ID that triggered this workflow'
         required: false
         type: string
+  repository_dispatch:
+    types: [sonarcloud-trigger]
 
 jobs:
   sonarcloud:
@@ -23,6 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       github.event_name == 'workflow_dispatch' || 
+      github.event_name == 'repository_dispatch' ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     
     steps:
@@ -34,6 +37,11 @@ jobs:
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "Triggered by: ${{ github.event.inputs.triggered_by }}"
             echo "CI Run ID: ${{ github.event.inputs.ci_run_id }}"
+          elif [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+            echo "Triggered by: Repository dispatch event"
+            echo "Event Type: ${{ github.event.action }}"
+            echo "Triggered by: ${{ github.event.client_payload.triggered_by }}"
+            echo "CI Run ID: ${{ github.event.client_payload.ci_run_id }}"
           elif [ "${{ github.event_name }}" == "workflow_run" ]; then
             echo "Triggered by: CI workflow completion"
             echo "CI Workflow: ${{ github.event.workflow_run.name }}"
@@ -103,6 +111,7 @@ jobs:
     needs: sonarcloud
     if: |
       (github.event_name == 'workflow_dispatch') || 
+      (github.event_name == 'repository_dispatch') ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request')
     
     steps:

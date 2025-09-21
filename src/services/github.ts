@@ -134,7 +134,6 @@ export class GitHubService {
 
       return response.data.length > 0 ? response.data[0] : null;
     } catch (error) {
-      console.warn('Failed to check for existing pull request:', error);
       return null;
     }
   }

@@ -134,7 +134,6 @@ export class AIDescriptionGeneratorService {
       };
     } catch (error) {
       console.error(error);
-      console.warn(`${this.selectedProvider || 'AI'} API unavailable, trying fallback providers...`);
       return this.tryFallbackProviders(options);
     }
   }
@@ -195,12 +194,10 @@ export class AIDescriptionGeneratorService {
         this.selectedProvider = provider;
         return { ...result, summary };
       } catch (error) {
-        console.warn(`${provider.toUpperCase()} also failed:`, error);
         continue;
       }
     }
 
-    console.warn('All AI providers failed, falling back to template-based generation');
     return this.generateFallbackDescription(options);
   }
 
