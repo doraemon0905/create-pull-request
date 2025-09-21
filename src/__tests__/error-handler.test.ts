@@ -367,7 +367,7 @@ describe('Error Handler Utils', () => {
       try {
         handleErrorWithPrefix(originalError);
       } catch (thrownError) {
-        expect(thrownError.stack).toBe(originalStack);
+        expect((thrownError as Error).stack).toBe(originalStack);
       }
     });
 
@@ -380,8 +380,8 @@ describe('Error Handler Utils', () => {
       try {
         handleErrorWithPrefix(customError);
       } catch (thrownError) {
-        expect(thrownError.code).toBe('CUSTOM_CODE');
-        expect(thrownError.details).toEqual({ field: 'username', value: 'invalid' });
+        expect((thrownError as any).code).toBe('CUSTOM_CODE');
+        expect((thrownError as any).details).toEqual({ field: 'username', value: 'invalid' });
       }
     });
   });

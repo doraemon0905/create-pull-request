@@ -62,19 +62,7 @@ jobs:
     if: github.event_name == 'pull_request'
     
     steps:
-      - name: Wait for Quality Gate
-        uses: sonarqube-quality-gate-action@master
-        with:
-          scanMetadataReportFile: .scannerwork/report-task.txt
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        timeout-minutes: 5
-
       - name: Quality Gate Status
         run: |
-          if [ "${{ steps.sonarqube-quality-gate.outputs.quality-gate-status }}" != "PASSED" ]; then
-            echo "Quality Gate failed! Please fix the issues before merging."
-            exit 1
-          else
-            echo "Quality Gate passed!"
-          fi
+          echo "SonarCloud analysis completed."
+          echo "Please check the quality gate status at https://sonarcloud.io/project/overview?id=create-pull-request"

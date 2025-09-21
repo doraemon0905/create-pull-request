@@ -97,7 +97,7 @@ export function createError(message: string, code?: string, details?: any): Exte
 }
 
 export function isAxiosError(error: any): boolean {
-  return error && error.isAxiosError === true;
+  return !!(error && error.isAxiosError === true);
 }
 
 export function extractErrorDetails(error: any): ErrorDetails {
