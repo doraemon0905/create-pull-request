@@ -1,6 +1,10 @@
 name: SonarCloud Analysis
 
 on:
+  workflow_run:
+    workflows: ["🔍 CI/CD Pipeline"]
+    types: [completed]
+    branches: [main, develop]
   push:
     branches: [main, develop]
   pull_request:
@@ -10,6 +14,7 @@ jobs:
   sonarcloud:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'push' || github.event_name == 'pull_request'
     
     steps:
       - name: Checkout code
@@ -17,6 +22,14 @@ jobs:
         with:
           # Full git history is needed to get a proper list of changed files for SonarCloud
           fetch-depth: 0
+
+      - name: Download coverage artifacts from CI
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report-20
+          path: coverage/
+          github-token: ${{ secrets.GH_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -27,14 +40,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run linting
-        run: npm run lint
-
-      - name: Run tests with coverage
+      - name: Run tests with coverage (fallback)
+        if: github.event_name != 'workflow_run'
         run: npm run test -- --coverage --watchAll=false
 
       - name: Build project
         run: npm run build
+
+      - name: Verify coverage file exists
+        run: |
+          if [ -f "coverage/lcov.info" ]; then
+            echo "✅ Coverage file found: coverage/lcov.info"
+            echo "Coverage file size: $(wc -l < coverage/lcov.info) lines"
+          else
+            echo "❌ Coverage file not found: coverage/lcov.info"
+            echo "Available files in coverage directory:"
+            ls -la coverage/ || echo "Coverage directory does not exist"
+            exit 1
+          fi
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
