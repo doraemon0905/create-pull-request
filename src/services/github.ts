@@ -197,8 +197,6 @@ export class GitHubService {
       draft: pullRequest.draft
     };
 
-    console.log('Creating PR with data:', prData);
-
     try {
       const response = await this.octokit.rest.pulls.create(prData);
       return response.data;
@@ -247,16 +245,6 @@ export class GitHubService {
     if (pullRequest.head === pullRequest.base) {
       errors.push('Head branch cannot be the same as base branch');
     }
-
-    // Debug: Log what we're validating
-    console.log('Validating PR data:', {
-      title: pullRequest.title?.substring(0, 50) + '...',
-      titleLength: pullRequest.title?.length,
-      head: pullRequest.head,
-      base: pullRequest.base,
-      bodyLength: pullRequest.body?.length,
-      body: pullRequest.body
-    });
 
     if (errors.length > 0) {
       throw new Error(`Pull request validation failed:\n${errors.map(e => `- ${e}`).join('\n')}`);

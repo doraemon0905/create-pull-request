@@ -150,7 +150,6 @@ export class AIDescriptionGeneratorService {
     // If only one provider available, use it
     if (availableProviders.length === 1) {
       const provider = availableProviders[0];
-      console.log(`Using ${provider.toUpperCase()} as AI provider`);
       return provider;
     }
 
@@ -159,7 +158,6 @@ export class AIDescriptionGeneratorService {
     for (const preferred of preferredOrder) {
       if (availableProviders.includes(preferred)) {
         const provider = preferred;
-        console.log(`Using ${provider.toUpperCase()} as primary AI provider`);
         return provider;
       }
     }
@@ -190,13 +188,11 @@ export class AIDescriptionGeneratorService {
 
     for (const provider of remainingProviders) {
       try {
-        console.log(`Trying fallback provider: ${provider.toUpperCase()}`);
         const summary = await this.generateSummary(options, provider);
         const prompt = this.buildPrompt(options, summary);
         const response = await this.callAIAPI(prompt, provider);
         const result = this.parseAIResponse(response, provider);
 
-        console.log(`Successfully used fallback provider: ${provider.toUpperCase()}`);
         this.selectedProvider = provider;
         return { ...result, summary };
       } catch (error) {
@@ -383,50 +379,31 @@ export class AIDescriptionGeneratorService {
     }
 
     try {
-      console.log(chalk.gray('\n🔍 Debug - Summary Generation:'));
-      console.log(chalk.gray(`Provider: ${targetProvider}`));
-      console.log(chalk.gray(`Prompt length: ${summaryPrompt.length} characters`));
-
       const response = await this.callAIAPI(summaryPrompt, targetProvider);
       let content = this.extractContentFromResponse(response, targetProvider);
 
-      console.log(chalk.gray(`Raw summary response: "${content}"`));
-      console.log(chalk.gray(`Summary response length: ${content?.length || 0}`));
-      console.log(chalk.gray(`Is summary valid JSON: ${this.isValidJSON(content)}`));
-
       // Clean the content to remove markdown code blocks
       const cleanedContent = this.cleanJSONResponse(content);
-      console.log(chalk.gray(`Cleaned summary content: "${cleanedContent}"`));
-      console.log(chalk.gray(`Is cleaned summary valid JSON: ${this.isValidJSON(cleanedContent)}`));
 
       // Try to parse as JSON first, if it's valid JSON extract the content
       try {
         const parsed = JSON.parse(cleanedContent);
-        console.log(chalk.gray(`Summary JSON parsed successfully`));
-        console.log(chalk.gray(`Summary JSON keys: ${Object.keys(parsed).join(', ')}`));
 
         if (parsed.summary) {
           content = parsed.summary;
-          console.log(chalk.gray(`Using parsed.summary: "${content}"`));
         } else if (typeof parsed === 'string') {
           content = parsed;
-          console.log(chalk.gray(`Using parsed string: "${content}"`));
         } else {
-          console.log(chalk.gray(`No summary field found, using cleaned content`));
           content = cleanedContent;
         }
       } catch {
-        console.log(chalk.gray(`Summary is not JSON, using cleaned content as plain text`));
         content = cleanedContent;
       }
 
       const finalSummary = content.trim().replace(/["']/g, ''); // Remove quotes
-      console.log(chalk.gray(`Final summary: "${finalSummary}"`));
 
       return finalSummary;
     } catch (error) {
-      console.log(chalk.gray(`❌ Summary generation failed: ${error}`));
-      console.log(chalk.gray(`Using fallback summary generation`));
       // Enhanced fallback summary with file details
       return this.generateEnhancedFallbackSummary(jiraTicket, gitChanges, repoInfo);
     }
@@ -770,16 +747,6 @@ export class AIDescriptionGeneratorService {
   private parseAIResponse(response: any, provider: AIProvider): GeneratedPRContent {
     const content = this.extractContentFromResponse(response, provider);
 
-    // Debug: Log the raw response
-    console.log(chalk.gray('\n🔍 Debug - Raw AI Response:'));
-    console.log(chalk.gray(`Provider: ${provider}`));
-    console.log(chalk.gray(`Full response structure:`));
-    console.log(chalk.gray(JSON.stringify(response, null, 2).substring(0, LIMITS.MAX_DESCRIPTION_PREVIEW_LENGTH) + '...'));
-    console.log(chalk.gray(`Extracted content:`));
-    console.log(chalk.gray(`"${content}"`));
-    console.log(chalk.gray(`Content length: ${content?.length || 0}`));
-    console.log(chalk.gray(`Is valid JSON: ${this.isValidJSON(content)}`));
-
     return this.parseResponseContent(content);
   }
 
@@ -826,20 +793,11 @@ export class AIDescriptionGeneratorService {
   }
 
   private parseResponseContent(content: string): GeneratedPRContent {
-    console.log(chalk.gray('\n🔍 Debug - Parsing Response Content:'));
-    console.log(chalk.gray(`Raw content to parse: "${content}"`));
-
     // Clean the content to remove markdown code blocks
     const cleanedContent = this.cleanJSONResponse(content);
-    console.log(chalk.gray(`Cleaned content: "${cleanedContent}"`));
-    console.log(chalk.gray(`Is cleaned content valid JSON: ${this.isValidJSON(cleanedContent)}`));
 
     try {
       const parsed = JSON.parse(cleanedContent);
-      console.log(chalk.gray('✅ JSON parsing successful'));
-      console.log(chalk.gray(`Parsed object keys: ${Object.keys(parsed).join(', ')}`));
-      console.log(chalk.gray(`Parsed title: "${parsed.title}"`));
-      console.log(chalk.gray(`Parsed body length: ${parsed.body?.length || 0}`));
 
       // Use AI-generated content directly, only use empty string if truly missing
       // This way we can distinguish between AI-generated content and missing content
@@ -851,28 +809,15 @@ export class AIDescriptionGeneratorService {
         body: body.trim()
       };
 
-      console.log(chalk.gray(`Final parsed result:`));
-      console.log(chalk.gray(`- Title: "${result.title}"`));
-      console.log(chalk.gray(`- Body length: ${result.body.length}`));
-
       return result;
     } catch (error) {
-      console.log(chalk.gray('❌ JSON parsing failed'));
-      console.log(chalk.gray(`Parse error: ${error}`));
-      console.log(chalk.gray('Attempting manual extraction...'));
-
       // If parsing fails, extract content manually from the cleaned content first, then original
       const extractedTitle = this.extractTitle(cleanedContent) || this.extractTitle(content);
-      console.log(chalk.gray(`Extracted title: "${extractedTitle}"`));
 
       const result = {
         title: extractedTitle?.trim() || '',
         body: cleanedContent?.trim() || content?.trim() || ''
       };
-
-      console.log(chalk.gray(`Manual extraction result:`));
-      console.log(chalk.gray(`- Title: "${result.title}"`));
-      console.log(chalk.gray(`- Body length: ${result.body.length}`));
 
       return result;
     }
