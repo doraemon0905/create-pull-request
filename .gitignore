@@ -150,4 +150,11 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Compiled TypeScript output
+/lib/
 lib/
+*.js
+*.js.map
+*.d.ts
+*.d.ts.map
