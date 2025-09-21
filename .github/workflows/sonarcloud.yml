@@ -5,14 +5,42 @@ on:
     workflows: ["🔍 CI/CD Pipeline"]
     types: [completed]
     branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      triggered_by:
+        description: 'Who triggered this workflow'
+        required: false
+        default: 'manual'
+        type: string
+      ci_run_id:
+        description: 'CI run ID that triggered this workflow'
+        required: false
+        type: string
 
 jobs:
   sonarcloud:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'success'
+    if: |
+      github.event_name == 'workflow_dispatch' || 
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     
     steps:
+      - name: Show trigger information
+        run: |
+          echo "🔍 SonarCloud Analysis Trigger Information"
+          echo "=========================================="
+          echo "Event: ${{ github.event_name }}"
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "Triggered by: ${{ github.event.inputs.triggered_by }}"
+            echo "CI Run ID: ${{ github.event.inputs.ci_run_id }}"
+          elif [ "${{ github.event_name }}" == "workflow_run" ]; then
+            echo "Triggered by: CI workflow completion"
+            echo "CI Workflow: ${{ github.event.workflow_run.name }}"
+            echo "CI Run ID: ${{ github.event.workflow_run.id }}"
+          fi
+          echo ""
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -73,7 +101,9 @@ jobs:
     name: Quality Gate Check
     runs-on: ubuntu-latest
     needs: sonarcloud
-    if: github.event.workflow_run.event == 'pull_request'
+    if: |
+      (github.event_name == 'workflow_dispatch') || 
+      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request')
     
     steps:
       - name: Quality Gate Status

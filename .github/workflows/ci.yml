@@ -391,3 +391,42 @@ jobs:
           else
             echo "❌ Some checks failed. Review the results above."
           fi
+
+  # Trigger SonarCloud analysis when all CI jobs pass
+  trigger-sonarcloud:
+    runs-on: ubuntu-latest
+    needs: [validate, security, code-quality, compatibility]
+    if: |
+      needs.validate.result == 'success' && 
+      needs.security.result == 'success' && 
+      needs.code-quality.result == 'success' && 
+      needs.compatibility.result == 'success'
+    
+    steps:
+      - name: 🚀 Trigger SonarCloud Analysis
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const ref = context.ref;
+            
+            console.log(`🚀 Triggering SonarCloud analysis for ${owner}/${repo}@${ref}`);
+            
+            try {
+              // Trigger the SonarCloud workflow
+              await github.rest.actions.createWorkflowDispatch({
+                owner,
+                repo,
+                workflow_id: 'SonarCloud Analysis',
+                ref: ref,
+                inputs: {
+                  triggered_by: 'ci-pipeline',
+                  ci_run_id: context.runId
+                }
+              });
+              
+              console.log('✅ SonarCloud workflow triggered successfully');
+            } catch (error) {
+              console.error('❌ Failed to trigger SonarCloud workflow:', error.message);
+              throw error;
+            }
