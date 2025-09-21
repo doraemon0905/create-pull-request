@@ -39,13 +39,13 @@ jobs:
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}  # Needed to get PR information, if any
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           # Additional arguments for the sonarcloud scanner
           args: >
             -Dsonar.projectKey=create-pull-request
-            -Dsonar.organization=your-organization
+            -Dsonar.organization=doraemon0905
             -Dsonar.sources=src
             -Dsonar.tests=src/__tests__
             -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts
