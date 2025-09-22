@@ -61,7 +61,7 @@ export class GitService {
             const fileDiff = await this.git.diff([`${baseBranch}...HEAD`, '--', file.file]);
             baseFileChange.diffContent = fileDiff;
             baseFileChange.lineNumbers = this.extractLineNumbers(fileDiff);
-          } catch (error) {
+          } catch (_error) {
             // If we can't get diff for a specific file, continue without it
           }
         }
