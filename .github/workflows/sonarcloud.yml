@@ -16,6 +16,10 @@ on:
         description: 'CI run ID that triggered this workflow'
         required: false
         type: string
+      pr_number:
+        description: 'Pull request number for commenting'
+        required: false
+        type: string
   repository_dispatch:
     types: [sonarcloud-trigger]
 
@@ -46,6 +50,8 @@ jobs:
           echo "Event: ${{ github.event_name }}"
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "Triggered by: ${{ github.event.inputs.triggered_by }}"
+            echo "CI Run ID: ${{ github.event.inputs.ci_run_id }}"
+            echo "PR Number: ${{ github.event.inputs.pr_number }}"
           elif [ "${{ github.event_name }}" == "repository_dispatch" ]; then
             echo "Triggered by: Repository dispatch event"
             echo "Event Type: ${{ github.event.action }}"
@@ -189,18 +195,24 @@ jobs:
       - name: Get PR number
         id: pr-number
         run: |
-          if [ "${{ github.event_name }}" == "workflow_run" ]; then
-            # For workflow_run events, get PR number from the triggering workflow
+          # Priority 1: Use input parameter if provided (from CI workflow)
+          if [ -n "${{ github.event.inputs.pr_number }}" ] && [ "${{ github.event.inputs.pr_number }}" != "" ]; then
+            PR_NUMBER="${{ github.event.inputs.pr_number }}"
+            echo "🔍 Using PR number from input: $PR_NUMBER"
+          elif [ "${{ github.event_name }}" == "workflow_run" ]; then
+            # Priority 2: For workflow_run events, get PR number from the triggering workflow
             PR_NUMBER=$(gh api repos/${{ github.repository }}/pulls \
               --jq ".[] | select(.head.sha == \"${{ github.event.workflow_run.head_sha }}\") | .number" \
               || echo "")
+            echo "🔍 Retrieved PR number from workflow_run: $PR_NUMBER"
           else
-            # For other events, try to get from context
+            # Priority 3: For other events, try to get from context
             PR_NUMBER="${{ github.event.pull_request.number }}"
+            echo "🔍 Using PR number from context: $PR_NUMBER"
           fi
           
           echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
-          echo "🔍 PR Number: $PR_NUMBER"
+          echo "🔍 Final PR Number: $PR_NUMBER"
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
 

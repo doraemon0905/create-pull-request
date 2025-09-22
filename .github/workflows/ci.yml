@@ -497,17 +497,28 @@ jobs:
             const { owner, repo } = context.repo;
             const ref = context.ref;
             
-            // Determine the source branch for SonarCloud
+            // Determine the source branch and PR number for SonarCloud
             let sourceBranch;
+            let prNumber = '';
+            
             if (ref.startsWith('refs/pull/')) {
               // For pull requests, we need to get the source branch from the PR
               // Since we're in a PR context, we can use the head ref
               sourceBranch = context.payload.pull_request.head.ref;
+              prNumber = context.payload.pull_request.number.toString();
               console.log(`🔍 Pull request detected, using source branch: ${sourceBranch}`);
+              console.log(`🔍 PR Number: ${prNumber}`);
+            } else if (context.eventName === 'pull_request') {
+              // Alternative PR detection
+              sourceBranch = context.payload.pull_request.head.ref;
+              prNumber = context.payload.pull_request.number.toString();
+              console.log(`🔍 Pull request event detected, using source branch: ${sourceBranch}`);
+              console.log(`🔍 PR Number: ${prNumber}`);
             } else {
               // For direct branch pushes, use the branch name
               sourceBranch = ref.replace('refs/heads/', '');
               console.log(`🔍 Branch push detected, using branch: ${sourceBranch}`);
+              console.log(`🔍 No PR number available for branch push`);
             }
             
             console.log(`🚀 Triggering SonarCloud analysis for ${owner}/${repo}@${sourceBranch}`);
@@ -527,7 +538,9 @@ jobs:
                   body: JSON.stringify({
                     ref: sourceBranch,
                     inputs: {
-                      triggered_by: 'ci-pipeline'
+                      triggered_by: 'ci-pipeline',
+                      pr_number: prNumber,
+                      ci_run_id: context.runId.toString()
                     }
                   })
                 });
