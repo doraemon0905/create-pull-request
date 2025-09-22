@@ -45,7 +45,7 @@
     "commander": "^14.0.0",
     "dotenv": "^17.2.2",
     "inquirer": "^12.9.6",
-    "ora": "^5.4.1",
+    "ora": "^9.0.0",
     "simple-git": "^3.20.0"
   },
   "devDependencies": {
