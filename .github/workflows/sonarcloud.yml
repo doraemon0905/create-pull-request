@@ -144,8 +144,17 @@ jobs:
         run: |
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
           
-          # Base arguments for all scans
-          BASE_ARGS="-Dsonar.projectKey=create-pull-request -Dsonar.organization=doraemon0905 -Dsonar.sources=src -Dsonar.tests=src/__tests__ -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/node_modules/**,**/lib/**,**/scripts/** -Dsonar.exclusions=node_modules/**,lib/**,coverage/**,scripts/**,**/*.d.ts -Dsonar.cpd.exclusions=**/*.test.ts,**/*.spec.ts"
+          # Get SonarCloud configuration from GitHub context (similar to context.repo)
+          SONAR_PROJECT_KEY="${{ github.event.repository.name }}"
+          SONAR_ORGANIZATION="${{ github.repository_owner }}"
+          
+          echo "🔧 Using GitHub context for SonarCloud configuration:"
+          echo "  Project Key: $SONAR_PROJECT_KEY (from github.event.repository.name)"
+          echo "  Organization: $SONAR_ORGANIZATION (from github.repository_owner)"
+          echo "  Repository: ${{ github.repository }}"
+          
+          # Base arguments for all scans with dynamic configuration
+          BASE_ARGS="-Dsonar.projectKey=$SONAR_PROJECT_KEY -Dsonar.organization=$SONAR_ORGANIZATION -Dsonar.sources=src -Dsonar.tests=src/__tests__ -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/node_modules/**,**/lib/**,**/scripts/** -Dsonar.exclusions=node_modules/**,lib/**,coverage/**,scripts/**,**/*.d.ts -Dsonar.cpd.exclusions=**/*.test.ts,**/*.spec.ts"
           
           if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
             # PR-specific analysis - analyze only the changes in this PR
@@ -276,6 +285,11 @@ jobs:
           
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
           
+          # Get SonarCloud configuration from GitHub context (same as prepare step)
+          SONAR_PROJECT_KEY="${{ github.event.repository.name }}"
+          
+          echo "🔧 Using project key for API calls: $SONAR_PROJECT_KEY (from github.event.repository.name)"
+          
           # Simple approach - try main project first, then PR if available
           QUALITY_GATE_STATUS="PENDING"
           
@@ -284,7 +298,7 @@ jobs:
             
             # Try PR-specific endpoint
             QG_RESPONSE=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
-              "https://sonarcloud.io/api/qualitygates/project_status?projectKey=create-pull-request&pullRequest=$PR_NUMBER" 2>/dev/null || echo "")
+              "https://sonarcloud.io/api/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY&pullRequest=$PR_NUMBER" 2>/dev/null || echo "")
             
             echo "📋 PR Quality Gate Response: $QG_RESPONSE"
             
@@ -295,7 +309,7 @@ jobs:
               echo "⚠️ PR analysis not ready yet, using project-level status"
               # Fallback to main project
               QG_RESPONSE=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
-                "https://sonarcloud.io/api/qualitygates/project_status?projectKey=create-pull-request" 2>/dev/null || echo "")
+                "https://sonarcloud.io/api/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY" 2>/dev/null || echo "")
               
               if [ -n "$QG_RESPONSE" ] && echo "$QG_RESPONSE" | jq -e '.projectStatus.status' > /dev/null 2>&1; then
                 QUALITY_GATE_STATUS=$(echo "$QG_RESPONSE" | jq -r '.projectStatus.status' 2>/dev/null || echo "PENDING")
@@ -305,7 +319,7 @@ jobs:
           else
             echo "🔍 Getting Quality Gate for main project..."
             QG_RESPONSE=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
-              "https://sonarcloud.io/api/qualitygates/project_status?projectKey=create-pull-request" 2>/dev/null || echo "")
+              "https://sonarcloud.io/api/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY" 2>/dev/null || echo "")
             
             if [ -n "$QG_RESPONSE" ] && echo "$QG_RESPONSE" | jq -e '.projectStatus.status' > /dev/null 2>&1; then
               QUALITY_GATE_STATUS=$(echo "$QG_RESPONSE" | jq -r '.projectStatus.status' 2>/dev/null || echo "PENDING")
@@ -338,13 +352,18 @@ jobs:
           
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
           
+          # Get SonarCloud configuration from GitHub context (same as prepare step)
+          SONAR_PROJECT_KEY="${{ github.event.repository.name }}"
+          
+          echo "🔧 Using project key for metrics API: $SONAR_PROJECT_KEY (from github.event.repository.name)"
+          
           # Simple approach - try to get metrics, use defaults if not available
           METRICS=""
           
           if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
             echo "🎯 Attempting to fetch metrics for PR #$PR_NUMBER..."
             METRICS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
-              "https://sonarcloud.io/api/measures/component?component=create-pull-request&pullRequest=$PR_NUMBER&metricKeys=bugs,vulnerabilities,security_hotspots,code_smells,coverage,duplicated_lines_density,ncloc" 2>/dev/null || echo "")
+              "https://sonarcloud.io/api/measures/component?component=$SONAR_PROJECT_KEY&pullRequest=$PR_NUMBER&metricKeys=bugs,vulnerabilities,security_hotspots,code_smells,coverage,duplicated_lines_density,ncloc" 2>/dev/null || echo "")
             
             echo "📋 PR Metrics Response: $METRICS"
             
@@ -352,12 +371,12 @@ jobs:
             if [ -z "$METRICS" ] || ! echo "$METRICS" | jq -e '.component' > /dev/null 2>&1; then
               echo "⚠️ PR metrics not available, using main project metrics"
               METRICS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
-                "https://sonarcloud.io/api/measures/component?component=create-pull-request&metricKeys=bugs,vulnerabilities,security_hotspots,code_smells,coverage,duplicated_lines_density,ncloc" 2>/dev/null || echo "")
+                "https://sonarcloud.io/api/measures/component?component=$SONAR_PROJECT_KEY&metricKeys=bugs,vulnerabilities,security_hotspots,code_smells,coverage,duplicated_lines_density,ncloc" 2>/dev/null || echo "")
             fi
           else
             echo "📊 Fetching metrics for main project..."
             METRICS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
-              "https://sonarcloud.io/api/measures/component?component=create-pull-request&metricKeys=bugs,vulnerabilities,security_hotspots,code_smells,coverage,duplicated_lines_density,ncloc" 2>/dev/null || echo "")
+              "https://sonarcloud.io/api/measures/component?component=$SONAR_PROJECT_KEY&metricKeys=bugs,vulnerabilities,security_hotspots,code_smells,coverage,duplicated_lines_density,ncloc" 2>/dev/null || echo "")
           fi
           
           # Simple metric extraction with defaults
@@ -433,9 +452,29 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
       - name: Create SonarCloud comment for PR
+        id: create-sonarcloud-comment
         if: steps.pr-number.outputs.pr_number != ''
+        continue-on-error: true
         run: |
           PR_NUMBER="${{ steps.pr-number.outputs.pr_number }}"
+          
+          echo "🔍 Starting SonarCloud comment creation process..."
+          echo "📋 Configuration:"
+          echo "  PR Number: $PR_NUMBER"
+          echo "  Repository: ${{ github.repository }}"
+          echo "  Event: ${{ github.event_name }}"
+          echo "  Actor: ${{ github.actor }}"
+          echo "  GH_TOKEN available: $([ -n "$GH_TOKEN" ] && echo "✅ Yes" || echo "❌ No")"
+          
+          # Verify GitHub CLI is working
+          echo "🔧 Testing GitHub CLI connectivity..."
+          if gh auth status 2>/dev/null; then
+            echo "✅ GitHub CLI authentication successful"
+          else
+            echo "❌ GitHub CLI authentication failed"
+            echo "🔍 Attempting to check token permissions..."
+            gh api user 2>/dev/null && echo "✅ Token has basic permissions" || echo "❌ Token permissions issue"
+          fi
           QUALITY_GATE_STATUS="${{ needs.sonarcloud.outputs.quality_gate_status }}"
           QUALITY_GATE_RESULT="${{ needs.sonarcloud.outputs.quality_gate_result }}"
           
@@ -537,28 +576,84 @@ jobs:
             echo "📝 Found existing SonarCloud comment (ID: $EXISTING_COMMENT_ID), updating..."
             
             # Update the existing comment
+            echo "🔧 Attempting to update existing comment #$EXISTING_COMMENT_ID..."
             if gh api repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT_ID \
               --method PATCH \
-              --field body="$COMMENT_BODY"; then
+              --field body="$COMMENT_BODY" 2>&1; then
               echo "✅ Updated existing SonarCloud comment #$EXISTING_COMMENT_ID on PR #$PR_NUMBER"
             else
-              echo "⚠️ Failed to update existing comment, creating new one instead..."
-              gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
-              echo "✅ Created new SonarCloud comment on PR #$PR_NUMBER (fallback)"
+              echo "⚠️ Failed to update existing comment #$EXISTING_COMMENT_ID, creating new one instead..."
+              echo "🔧 Attempting to create new comment as fallback..."
+              if gh pr comment $PR_NUMBER --body "$COMMENT_BODY" 2>&1; then
+                echo "✅ Created new SonarCloud comment on PR #$PR_NUMBER (fallback)"
+              else
+                echo "❌ Failed to create fallback comment as well"
+                echo "🔍 Debugging information:"
+                echo "  PR Number: $PR_NUMBER"
+                echo "  Existing Comment ID: $EXISTING_COMMENT_ID"
+                echo "  Repository: ${{ github.repository }}"
+                echo "⚠️ Both comment update and creation failed, but continuing workflow..."
+              fi
             fi
           else
             echo "📝 No existing SonarCloud comment found, creating new one..."
             
             # Create new comment
-            if gh pr comment $PR_NUMBER --body "$COMMENT_BODY"; then
+            echo "🔧 Attempting to create new comment on PR #$PR_NUMBER..."
+            if gh pr comment $PR_NUMBER --body "$COMMENT_BODY" 2>&1; then
               echo "✅ Created new SonarCloud comment on PR #$PR_NUMBER"
             else
               echo "❌ Failed to create SonarCloud comment on PR #$PR_NUMBER"
-              exit 1
+              echo "🔍 Debugging information:"
+              echo "  PR Number: $PR_NUMBER"
+              echo "  Repository: ${{ github.repository }}"
+              echo "  Event: ${{ github.event_name }}"
+              echo "  Actor: ${{ github.actor }}"
+              
+              # Check if PR exists
+              if gh pr view $PR_NUMBER --json number,state,title 2>/dev/null; then
+                echo "✅ PR #$PR_NUMBER exists and is accessible"
+              else
+                echo "❌ PR #$PR_NUMBER not found or not accessible"
+              fi
+              
+              # Check permissions
+              echo "🔐 Checking repository permissions..."
+              gh api repos/${{ github.repository }}/collaborators/${{ github.actor }}/permission 2>/dev/null || echo "❌ Could not check permissions"
+              
+              echo "⚠️ Comment creation failed, but continuing workflow..."
             fi
           fi
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: Comment Creation Summary
+        if: always() && steps.pr-number.outputs.pr_number != ''
+        run: |
+          PR_NUMBER="${{ steps.pr-number.outputs.pr_number }}"
+          echo "📋 SonarCloud Comment Creation Summary"
+          echo "========================================="
+          echo "PR Number: $PR_NUMBER"
+          echo "Repository: ${{ github.repository }}"
+          
+          # Check if the previous step succeeded
+          if [ "${{ steps.create-sonarcloud-comment.outcome }}" = "success" ]; then
+            echo "✅ Comment creation completed successfully"
+          elif [ "${{ steps.create-sonarcloud-comment.outcome }}" = "failure" ]; then
+            echo "❌ Comment creation failed, but workflow continues"
+            echo "🔍 Common issues and solutions:"
+            echo "  - Check if GH_TOKEN has 'write' permissions for pull requests"
+            echo "  - Verify the PR exists and is accessible"
+            echo "  - Ensure the token belongs to a user with repository access"
+            echo "  - Check if the repository allows comments from workflows"
+          else
+            echo "⚠️ Comment creation step was skipped or had an unknown outcome"
+          fi
+          
+          echo ""
+          echo "🔗 Manual verification:"
+          echo "  - Check PR #$PR_NUMBER for SonarCloud comments"
+          echo "  - View SonarCloud analysis: https://sonarcloud.io/project/pull_requests?id=${{ github.event.repository.name }}&pullRequest=$PR_NUMBER"
 
       - name: Quality Gate Status Summary
         run: |
