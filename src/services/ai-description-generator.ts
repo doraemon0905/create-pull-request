@@ -3,7 +3,7 @@ import { JiraTicket } from './jira';
 import { GitChanges, FileChange } from './git';
 import { PullRequestTemplate } from './github';
 import { getConfig } from '../utils/config';
-import * as inquirer from 'inquirer';
+import inquirer from 'inquirer';
 import { API_URLS, LIMITS, HEADERS, DEFAULT_MODELS } from '../constants';
 
 export interface GenerateDescriptionOptions {

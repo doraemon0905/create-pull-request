@@ -205,7 +205,7 @@ export async function createPullRequest(options: CreatePROptions): Promise<void>
     console.log(chalk.gray(`Body length: ${generatedContent.body?.length || 0} characters`));
 
     if (action === 'edit') {
-      const editPrompts = [
+      const editPrompts: any[] = [
         {
           type: 'input',
           name: 'editedTitle',
