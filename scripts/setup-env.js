@@ -1,11 +1,28 @@
 #!/usr/bin/env node
 
-const inquirer = require('inquirer');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const chalk = require('chalk');
 const { setupGitExtension } = require('./setup-git-extension');
+
+// For inquirer v12+, we need to use dynamic import since it's an ES module
+let inquirer;
+
+async function loadInquirer() {
+  if (!inquirer) {
+    try {
+      // Dynamic import for ES module
+      const inquirerModule = await import('inquirer');
+      inquirer = inquirerModule.default || inquirerModule;
+    } catch (error) {
+      console.error(chalk.red('❌ Error loading inquirer:'), error.message);
+      console.error(chalk.yellow('Please try: npm install inquirer'));
+      process.exit(1);
+    }
+  }
+  return inquirer;
+}
 
 // Import constants from compiled JavaScript
 const { CONFIG, DEFAULT_MODELS, SYSTEM } = require('../lib/constants');
@@ -25,6 +42,9 @@ function getConfigFilePath() {
 
 async function setupEnvironment() {
     console.log(chalk.blue('🚀 Environment Setup Wizard'));
+    
+    // Load inquirer first
+    await loadInquirer();
     console.log(chalk.gray('This will collect your environment configuration and save it for global use.\n'));
 
     // Load existing configuration if available
@@ -425,6 +445,9 @@ function validateConfig(config) {
 
 // Helper function to update existing configuration
 async function updateConfiguration() {
+    // Load inquirer first
+    await loadInquirer();
+    
     if (!configExists()) {
         console.log(chalk.yellow('No existing configuration found. Running initial setup...'));
         return await setupEnvironment();
