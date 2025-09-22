@@ -67,6 +67,35 @@ jobs:
         with:
           # Full git history is needed to get a proper list of changed files for SonarCloud
           fetch-depth: 0
+          # For PR analysis, we need to checkout the PR head
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.pr_number && format('refs/pull/{0}/head', github.event.inputs.pr_number) || github.ref }}
+
+      - name: Setup Git for PR analysis
+        if: github.event.inputs.pr_number != ''
+        run: |
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          echo "🔧 Setting up Git environment for PR #$PR_NUMBER analysis..."
+          
+          # Fetch the PR and base branch
+          git fetch origin pull/$PR_NUMBER/head:pr-$PR_NUMBER
+          git fetch origin
+          
+          # Get PR information
+          PR_BASE=$(gh pr view $PR_NUMBER --json baseRefName --jq '.baseRefName' 2>/dev/null || echo "main")
+          echo "📋 Base branch: $PR_BASE"
+          
+          # Ensure we have the base branch
+          git fetch origin $PR_BASE:$PR_BASE 2>/dev/null || true
+          
+          # Show current git status
+          echo "📊 Git status:"
+          echo "  Current branch: $(git branch --show-current)"
+          echo "  Current commit: $(git rev-parse HEAD)"
+          echo "  Available branches: $(git branch -a | head -5)"
+          
+          echo "✅ Git environment ready for SonarCloud PR analysis"
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
       - name: Download coverage artifacts from CI
         uses: actions/download-artifact@v4
@@ -122,20 +151,39 @@ jobs:
             # PR-specific analysis - analyze only the changes in this PR
             echo "🔍 Configuring SonarCloud for PR-specific analysis (PR #$PR_NUMBER)"
             
-            # Get PR information
-            PR_BASE=$(gh pr view $PR_NUMBER --json baseRefName --jq '.baseRefName')
-            PR_HEAD=$(gh pr view $PR_NUMBER --json headRefName --jq '.headRefName')
-            
-            echo "📋 PR Details:"
-            echo "  PR Number: $PR_NUMBER"
-            echo "  Base branch: $PR_BASE"
-            echo "  Head branch: $PR_HEAD"
-            
-            # PR-specific arguments
-            PR_ARGS="-Dsonar.pullrequest.key=$PR_NUMBER -Dsonar.pullrequest.branch=$PR_HEAD -Dsonar.pullrequest.base=$PR_BASE"
-            SONAR_ARGS="$BASE_ARGS $PR_ARGS"
-            
-            echo "✅ Using PR-specific analysis mode"
+            # Verify PR exists and get information
+            if gh pr view $PR_NUMBER --json number,baseRefName,headRefName,state > /dev/null 2>&1; then
+              PR_INFO=$(gh pr view $PR_NUMBER --json baseRefName,headRefName,state,title)
+              PR_BASE=$(echo "$PR_INFO" | jq -r '.baseRefName')
+              PR_HEAD=$(echo "$PR_INFO" | jq -r '.headRefName')
+              PR_STATE=$(echo "$PR_INFO" | jq -r '.state')
+              PR_TITLE=$(echo "$PR_INFO" | jq -r '.title')
+              
+              echo "📋 PR Details:"
+              echo "  PR Number: $PR_NUMBER"
+              echo "  Title: $PR_TITLE"
+              echo "  State: $PR_STATE"
+              echo "  Base branch: $PR_BASE"
+              echo "  Head branch: $PR_HEAD"
+              
+              if [ "$PR_STATE" = "OPEN" ]; then
+                # PR-specific arguments for SonarCloud
+                PR_ARGS="-Dsonar.pullrequest.key=$PR_NUMBER -Dsonar.pullrequest.branch=$PR_HEAD -Dsonar.pullrequest.base=$PR_BASE -Dsonar.pullrequest.github.repository=${{ github.repository }}"
+                SONAR_ARGS="$BASE_ARGS $PR_ARGS"
+                
+                echo "✅ Using PR-specific analysis mode"
+                echo "🔗 This will create a PR analysis on SonarCloud for PR #$PR_NUMBER"
+              else
+                echo "⚠️ PR #$PR_NUMBER is not open (state: $PR_STATE), falling back to branch analysis"
+                SONAR_ARGS="$BASE_ARGS -Dsonar.branch.name=$PR_HEAD"
+                echo "✅ Using branch analysis mode for $PR_HEAD"
+              fi
+            else
+              echo "❌ Failed to get PR #$PR_NUMBER information, falling back to full project analysis"
+              echo "🔍 This might happen if the PR doesn't exist or there are permission issues"
+              SONAR_ARGS="$BASE_ARGS"
+              echo "✅ Using full project analysis mode (fallback)"
+            fi
           else
             # Full project analysis (fallback)
             echo "🔍 No PR number provided, using full project analysis"
@@ -148,6 +196,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
+      - name: Pre-scan verification
+        run: |
+          echo "🔍 Pre-scan verification..."
+          echo "📋 SonarCloud arguments: ${{ steps.sonar-args.outputs.sonar_args }}"
+          
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
+            echo "🎯 This scan will create a PR analysis on SonarCloud for PR #$PR_NUMBER"
+            echo "🔗 After completion, check: https://sonarcloud.io/project/pull_requests?id=create-pull-request"
+          else
+            echo "📊 This scan will update the main project analysis on SonarCloud"
+            echo "🔗 After completion, check: https://sonarcloud.io/project/overview?id=create-pull-request"
+          fi
+
       - name: SonarCloud Scan
         id: sonarcloud-scan
         uses: SonarSource/sonarcloud-github-action@master
@@ -159,6 +221,15 @@ jobs:
           args: ${{ steps.sonar-args.outputs.sonar_args }}
         continue-on-error: true
 
+      - name: Post-scan verification
+        run: |
+          echo "📊 SonarCloud scan completed"
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
+            echo "🎯 PR analysis should now be available on SonarCloud for PR #$PR_NUMBER"
+            echo "⏳ Note: It may take a few moments for the analysis to appear in the SonarCloud UI"
+          fi
+
       - name: Wait for SonarCloud Quality Gate
         id: quality-gate
         run: |
@@ -167,25 +238,64 @@ jobs:
           
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
           
-          if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
-            # PR-specific quality gate check
-            echo "🔍 Checking Quality Gate for PR #$PR_NUMBER..."
+          # Retry logic for quality gate check
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          QUALITY_GATE_STATUS="ERROR"
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            echo "🔄 Quality Gate check attempt $((RETRY_COUNT + 1)) of $MAX_RETRIES..."
             
-            # For PR analysis, use the pull request specific API
-            QUALITY_GATE_STATUS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
-              "https://sonarcloud.io/api/qualitygates/project_status?projectKey=create-pull-request&pullRequest=$PR_NUMBER" \
-              | jq -r '.projectStatus.status // "ERROR"')
+            if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
+              # PR-specific quality gate check
+              echo "🔍 Checking Quality Gate for PR #$PR_NUMBER..."
+              
+              QG_RESPONSE=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+                "https://sonarcloud.io/api/qualitygates/project_status?projectKey=create-pull-request&pullRequest=$PR_NUMBER" 2>/dev/null)
+              
+              # Safely extract status with null handling
+              if [ -n "$QG_RESPONSE" ] && echo "$QG_RESPONSE" | jq -e '.projectStatus' > /dev/null 2>&1; then
+                QUALITY_GATE_STATUS=$(echo "$QG_RESPONSE" | jq -r '.projectStatus.status // "ERROR"' 2>/dev/null || echo "ERROR")
+                echo "🎯 PR-specific Quality Gate Status: $QUALITY_GATE_STATUS"
+              else
+                echo "⚠️ Invalid quality gate response for PR, raw response: $QG_RESPONSE"
+                QUALITY_GATE_STATUS="ERROR"
+              fi
+            else
+              # Full project quality gate check (fallback)
+              echo "🔍 Checking Quality Gate for full project..."
+              
+              QG_RESPONSE=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+                "https://sonarcloud.io/api/qualitygates/project_status?projectKey=create-pull-request" 2>/dev/null)
+              
+              # Safely extract status with null handling
+              if [ -n "$QG_RESPONSE" ] && echo "$QG_RESPONSE" | jq -e '.projectStatus' > /dev/null 2>&1; then
+                QUALITY_GATE_STATUS=$(echo "$QG_RESPONSE" | jq -r '.projectStatus.status // "ERROR"' 2>/dev/null || echo "ERROR")
+                echo "📊 Project Quality Gate Status: $QUALITY_GATE_STATUS"
+              else
+                echo "⚠️ Invalid quality gate response for project, raw response: $QG_RESPONSE"
+                QUALITY_GATE_STATUS="ERROR"
+              fi
+            fi
             
-            echo "🎯 PR-specific Quality Gate Status: $QUALITY_GATE_STATUS"
-          else
-            # Full project quality gate check (fallback)
-            echo "🔍 Checking Quality Gate for full project..."
-            
-            QUALITY_GATE_STATUS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
-              "https://sonarcloud.io/api/qualitygates/project_status?projectKey=create-pull-request" \
-              | jq -r '.projectStatus.status // "ERROR"')
-            
-            echo "📊 Project Quality Gate Status: $QUALITY_GATE_STATUS"
+            # Check if we got a valid status (not ERROR or empty)
+            if [ "$QUALITY_GATE_STATUS" != "ERROR" ] && [ -n "$QUALITY_GATE_STATUS" ]; then
+              echo "✅ Successfully retrieved quality gate status"
+              break
+            else
+              echo "⚠️ Failed to retrieve valid quality gate status, retrying in 10 seconds..."
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                sleep 10
+              fi
+            fi
+          done
+          
+          # If all retries failed, log and continue with ERROR status
+          if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+            echo "❌ Failed to retrieve quality gate status after $MAX_RETRIES attempts"
+            echo "🔧 Using ERROR status as fallback"
+            QUALITY_GATE_STATUS="ERROR"
           fi
           
           echo "quality_gate_status=$QUALITY_GATE_STATUS" >> $GITHUB_OUTPUT
@@ -221,28 +331,70 @@ jobs:
           
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
           
-          if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
-            # PR-specific metrics
-            echo "🎯 Fetching metrics for PR #$PR_NUMBER..."
+          # Function to safely extract metric value
+          extract_metric() {
+            local metrics="$1"
+            local metric_name="$2"
+            local default_value="${3:-0}"
             
-            METRICS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
-              "https://sonarcloud.io/api/measures/component?component=create-pull-request&pullRequest=$PR_NUMBER&metricKeys=bugs,vulnerabilities,security_hotspots,code_smells,coverage,duplicated_lines_density,ncloc,sqale_rating,reliability_rating,security_rating")
-          else
-            # Full project metrics (fallback)
-            echo "📊 Fetching metrics for full project..."
+            # Check if metrics response is valid
+            if echo "$metrics" | jq -e '.component.measures' > /dev/null 2>&1; then
+              echo "$metrics" | jq -r ".component.measures[]? | select(.metric==\"$metric_name\") | .value // \"$default_value\"" 2>/dev/null || echo "$default_value"
+            else
+              echo "$default_value"
+            fi
+          }
+          
+          # Retry logic for metrics collection
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          METRICS=""
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            echo "🔄 Attempt $((RETRY_COUNT + 1)) of $MAX_RETRIES..."
             
-            METRICS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
-              "https://sonarcloud.io/api/measures/component?component=create-pull-request&metricKeys=bugs,vulnerabilities,security_hotspots,code_smells,coverage,duplicated_lines_density,ncloc,sqale_rating,reliability_rating,security_rating")
+            if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
+              # PR-specific metrics
+              echo "🎯 Fetching metrics for PR #$PR_NUMBER..."
+              
+              METRICS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+                "https://sonarcloud.io/api/measures/component?component=create-pull-request&pullRequest=$PR_NUMBER&metricKeys=bugs,vulnerabilities,security_hotspots,code_smells,coverage,duplicated_lines_density,ncloc,sqale_rating,reliability_rating,security_rating" 2>/dev/null)
+            else
+              # Full project metrics (fallback)
+              echo "📊 Fetching metrics for full project..."
+              
+              METRICS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+                "https://sonarcloud.io/api/measures/component?component=create-pull-request&metricKeys=bugs,vulnerabilities,security_hotspots,code_smells,coverage,duplicated_lines_density,ncloc,sqale_rating,reliability_rating,security_rating" 2>/dev/null)
+            fi
+            
+            # Check if we got valid metrics
+            if [ -n "$METRICS" ] && echo "$METRICS" | jq -e '.component' > /dev/null 2>&1; then
+              echo "✅ Successfully retrieved metrics"
+              break
+            else
+              echo "⚠️ Failed to retrieve valid metrics, retrying in 10 seconds..."
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                sleep 10
+              fi
+            fi
+          done
+          
+          # If all retries failed, log the response and use defaults
+          if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+            echo "❌ Failed to retrieve metrics after $MAX_RETRIES attempts"
+            echo "📋 Raw API response: $METRICS"
+            echo "🔧 Using default values for all metrics"
           fi
           
-          # Parse metrics
-          BUGS=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="bugs") | .value // "0"')
-          VULNERABILITIES=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="vulnerabilities") | .value // "0"')
-          SECURITY_HOTSPOTS=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="security_hotspots") | .value // "0"')
-          CODE_SMELLS=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="code_smells") | .value // "0"')
-          COVERAGE=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="coverage") | .value // "0"')
-          DUPLICATED_LINES=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="duplicated_lines_density") | .value // "0"')
-          LINES_OF_CODE=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="ncloc") | .value // "0"')
+          # Parse metrics with safe extraction
+          BUGS=$(extract_metric "$METRICS" "bugs" "0")
+          VULNERABILITIES=$(extract_metric "$METRICS" "vulnerabilities" "0")
+          SECURITY_HOTSPOTS=$(extract_metric "$METRICS" "security_hotspots" "0")
+          CODE_SMELLS=$(extract_metric "$METRICS" "code_smells" "0")
+          COVERAGE=$(extract_metric "$METRICS" "coverage" "0")
+          DUPLICATED_LINES=$(extract_metric "$METRICS" "duplicated_lines_density" "0")
+          LINES_OF_CODE=$(extract_metric "$METRICS" "ncloc" "0")
           
           echo "📋 Metrics Summary:"
           echo "  Bugs: $BUGS"
@@ -311,6 +463,14 @@ jobs:
           DUPLICATED_LINES="${{ needs.sonarcloud.outputs.duplicated_lines }}"
           LINES_OF_CODE="${{ needs.sonarcloud.outputs.lines_of_code }}"
           
+          # Check if metrics are available
+          METRICS_AVAILABLE="true"
+          if [ "$BUGS" = "0" ] && [ "$VULNERABILITIES" = "0" ] && [ "$SECURITY_HOTSPOTS" = "0" ] && [ "$CODE_SMELLS" = "0" ] && [ "$COVERAGE" = "0" ] && [ "$LINES_OF_CODE" = "0" ]; then
+            # All metrics are 0, might indicate API issues
+            echo "⚠️ All metrics are 0 - this might indicate SonarCloud analysis is still processing or API issues"
+            METRICS_AVAILABLE="false"
+          fi
+          
           # Create status message based on quality gate
           if [ "$QUALITY_GATE_STATUS" = "OK" ]; then
             STATUS_MESSAGE="✅ **Quality Gate: PASSED** - Great job! Your code meets all quality standards."
@@ -348,7 +508,9 @@ jobs:
 
           $STATUS_MESSAGE
 
-          > 🎯 **PR-Specific Analysis**: This analysis focuses only on the changes introduced in this pull request, not the entire project."
+          > 🎯 **PR-Specific Analysis**: This analysis focuses only on the changes introduced in this pull request, not the entire project.
+          $([ "$METRICS_AVAILABLE" = "false" ] && echo "
+          > ⚠️ **Note**: Some metrics may show as 0 if the SonarCloud analysis is still processing. Check the SonarCloud dashboard for the most up-to-date results.")"
 
           ### 📊 Code Quality Metrics
           | Metric | Value | Status |
