@@ -129,7 +129,7 @@ export class GitHubService {
       });
 
       return response.data.length > 0 ? response.data[0] : null;
-    } catch (error) {
+    } catch (_error) {
       return null;
     }
   }

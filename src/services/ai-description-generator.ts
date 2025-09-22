@@ -132,7 +132,7 @@ export class AIDescriptionGeneratorService {
         ...result,
         summary
       };
-    } catch (error) {
+    } catch (_error) {
       return this.tryFallbackProviders(options);
     }
   }
@@ -192,7 +192,7 @@ export class AIDescriptionGeneratorService {
 
         this.selectedProvider = provider;
         return { ...result, summary };
-      } catch (error) {
+      } catch (_error) {
         continue;
       }
     }
@@ -398,7 +398,7 @@ export class AIDescriptionGeneratorService {
       const finalSummary = content.trim().replace(/["']/g, ''); // Remove quotes
 
       return finalSummary;
-    } catch (error) {
+    } catch (_error) {
       // Enhanced fallback summary with file details
       return this.generateEnhancedFallbackSummary(jiraTicket, gitChanges, repoInfo);
     }
@@ -605,7 +605,7 @@ export class AIDescriptionGeneratorService {
         default:
           throw new Error(`Unsupported AI provider: ${provider}`);
       }
-    } catch (error) {
+    } catch (_error) {
       throw new Error(`${provider.toUpperCase()} API not available`);
     }
   }
@@ -804,7 +804,7 @@ export class AIDescriptionGeneratorService {
       };
 
       return result;
-    } catch (error) {
+    } catch (_error) {
       // If parsing fails, extract content manually from the cleaned content first, then original
       const extractedTitle = this.extractTitle(cleanedContent) || this.extractTitle(content);
 

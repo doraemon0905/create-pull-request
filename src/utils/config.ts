@@ -112,7 +112,7 @@ export function validateConfig(): boolean {
         ];
 
         return required.every(field => field && field.trim().length > 0);
-    } catch (error) {
+    } catch (_error) {
         return false;
     }
 }

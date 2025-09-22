@@ -13,7 +13,7 @@ module.exports = {
     es6: true,
   },
   rules: {
-    '@typescript-eslint/no-unused-vars': 'error',
+    '@typescript-eslint/no-unused-vars': ['error', { 'argsIgnorePattern': '^_', 'varsIgnorePattern': '^_', 'caughtErrorsIgnorePattern': '^_' }],
     'prefer-const': 'error',
     'no-var': 'error',
     'no-undef': 'off', // TypeScript handles this
