@@ -110,6 +110,44 @@ jobs:
             exit 1
           fi
 
+      - name: Prepare SonarCloud arguments
+        id: sonar-args
+        run: |
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          
+          # Base arguments for all scans
+          BASE_ARGS="-Dsonar.projectKey=create-pull-request -Dsonar.organization=doraemon0905 -Dsonar.sources=src -Dsonar.tests=src/__tests__ -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/node_modules/**,**/lib/**,**/scripts/** -Dsonar.exclusions=node_modules/**,lib/**,coverage/**,scripts/**,**/*.d.ts -Dsonar.cpd.exclusions=**/*.test.ts,**/*.spec.ts"
+          
+          if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
+            # PR-specific analysis - analyze only the changes in this PR
+            echo "🔍 Configuring SonarCloud for PR-specific analysis (PR #$PR_NUMBER)"
+            
+            # Get PR information
+            PR_BASE=$(gh pr view $PR_NUMBER --json baseRefName --jq '.baseRefName')
+            PR_HEAD=$(gh pr view $PR_NUMBER --json headRefName --jq '.headRefName')
+            
+            echo "📋 PR Details:"
+            echo "  PR Number: $PR_NUMBER"
+            echo "  Base branch: $PR_BASE"
+            echo "  Head branch: $PR_HEAD"
+            
+            # PR-specific arguments
+            PR_ARGS="-Dsonar.pullrequest.key=$PR_NUMBER -Dsonar.pullrequest.branch=$PR_HEAD -Dsonar.pullrequest.base=$PR_BASE"
+            SONAR_ARGS="$BASE_ARGS $PR_ARGS"
+            
+            echo "✅ Using PR-specific analysis mode"
+          else
+            # Full project analysis (fallback)
+            echo "🔍 No PR number provided, using full project analysis"
+            SONAR_ARGS="$BASE_ARGS"
+            echo "✅ Using full project analysis mode"
+          fi
+          
+          echo "sonar_args=$SONAR_ARGS" >> $GITHUB_OUTPUT
+          echo "📋 SonarCloud arguments: $SONAR_ARGS"
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
       - name: SonarCloud Scan
         id: sonarcloud-scan
         uses: SonarSource/sonarcloud-github-action@master
@@ -117,18 +155,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}  # Needed to get PR information, if any
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          # Additional arguments for the sonarcloud scanner
-          args: >
-            -Dsonar.projectKey=create-pull-request
-            -Dsonar.organization=doraemon0905
-            -Dsonar.sources=src
-            -Dsonar.tests=src/__tests__
-            -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts
-            -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info
-            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
-            -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/node_modules/**,**/lib/**,**/scripts/**
-            -Dsonar.exclusions=node_modules/**,lib/**,coverage/**,scripts/**,**/*.d.ts
-            -Dsonar.cpd.exclusions=**/*.test.ts,**/*.spec.ts
+          # Use dynamically prepared arguments
+          args: ${{ steps.sonar-args.outputs.sonar_args }}
         continue-on-error: true
 
       - name: Wait for SonarCloud Quality Gate
@@ -137,23 +165,53 @@ jobs:
           echo "⏳ Waiting for SonarCloud Quality Gate result..."
           sleep 30
           
-          # Get the project status from SonarCloud API
-          QUALITY_GATE_STATUS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
-            "https://sonarcloud.io/api/qualitygates/project_status?projectKey=create-pull-request" \
-            | jq -r '.projectStatus.status // "ERROR"')
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          
+          if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
+            # PR-specific quality gate check
+            echo "🔍 Checking Quality Gate for PR #$PR_NUMBER..."
+            
+            # For PR analysis, use the pull request specific API
+            QUALITY_GATE_STATUS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+              "https://sonarcloud.io/api/qualitygates/project_status?projectKey=create-pull-request&pullRequest=$PR_NUMBER" \
+              | jq -r '.projectStatus.status // "ERROR"')
+            
+            echo "🎯 PR-specific Quality Gate Status: $QUALITY_GATE_STATUS"
+          else
+            # Full project quality gate check (fallback)
+            echo "🔍 Checking Quality Gate for full project..."
+            
+            QUALITY_GATE_STATUS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+              "https://sonarcloud.io/api/qualitygates/project_status?projectKey=create-pull-request" \
+              | jq -r '.projectStatus.status // "ERROR"')
+            
+            echo "📊 Project Quality Gate Status: $QUALITY_GATE_STATUS"
+          fi
           
           echo "quality_gate_status=$QUALITY_GATE_STATUS" >> $GITHUB_OUTPUT
-          echo "🔍 Quality Gate Status: $QUALITY_GATE_STATUS"
+          echo "🔍 Final Quality Gate Status: $QUALITY_GATE_STATUS"
           
           if [ "$QUALITY_GATE_STATUS" = "OK" ]; then
             echo "✅ Quality Gate passed!"
-            echo "quality_gate_result=✅ **Quality Gate: PASSED**" >> $GITHUB_OUTPUT
+            if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
+              echo "quality_gate_result=✅ **Quality Gate: PASSED** (PR #$PR_NUMBER)" >> $GITHUB_OUTPUT
+            else
+              echo "quality_gate_result=✅ **Quality Gate: PASSED**" >> $GITHUB_OUTPUT
+            fi
           elif [ "$QUALITY_GATE_STATUS" = "WARN" ]; then
             echo "⚠️ Quality Gate passed with warnings"
-            echo "quality_gate_result=⚠️ **Quality Gate: PASSED with warnings**" >> $GITHUB_OUTPUT
+            if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
+              echo "quality_gate_result=⚠️ **Quality Gate: PASSED with warnings** (PR #$PR_NUMBER)" >> $GITHUB_OUTPUT
+            else
+              echo "quality_gate_result=⚠️ **Quality Gate: PASSED with warnings**" >> $GITHUB_OUTPUT
+            fi
           else
             echo "❌ Quality Gate failed!"
-            echo "quality_gate_result=❌ **Quality Gate: FAILED**" >> $GITHUB_OUTPUT
+            if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
+              echo "quality_gate_result=❌ **Quality Gate: FAILED** (PR #$PR_NUMBER)" >> $GITHUB_OUTPUT
+            else
+              echo "quality_gate_result=❌ **Quality Gate: FAILED**" >> $GITHUB_OUTPUT
+            fi
           fi
 
       - name: Get SonarCloud metrics
@@ -161,9 +219,21 @@ jobs:
         run: |
           echo "📊 Fetching SonarCloud metrics..."
           
-          # Get project metrics
-          METRICS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
-            "https://sonarcloud.io/api/measures/component?component=create-pull-request&metricKeys=bugs,vulnerabilities,security_hotspots,code_smells,coverage,duplicated_lines_density,ncloc,sqale_rating,reliability_rating,security_rating")
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          
+          if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
+            # PR-specific metrics
+            echo "🎯 Fetching metrics for PR #$PR_NUMBER..."
+            
+            METRICS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+              "https://sonarcloud.io/api/measures/component?component=create-pull-request&pullRequest=$PR_NUMBER&metricKeys=bugs,vulnerabilities,security_hotspots,code_smells,coverage,duplicated_lines_density,ncloc,sqale_rating,reliability_rating,security_rating")
+          else
+            # Full project metrics (fallback)
+            echo "📊 Fetching metrics for full project..."
+            
+            METRICS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+              "https://sonarcloud.io/api/measures/component?component=create-pull-request&metricKeys=bugs,vulnerabilities,security_hotspots,code_smells,coverage,duplicated_lines_density,ncloc,sqale_rating,reliability_rating,security_rating")
+          fi
           
           # Parse metrics
           BUGS=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="bugs") | .value // "0"')
@@ -173,6 +243,15 @@ jobs:
           COVERAGE=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="coverage") | .value // "0"')
           DUPLICATED_LINES=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="duplicated_lines_density") | .value // "0"')
           LINES_OF_CODE=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="ncloc") | .value // "0"')
+          
+          echo "📋 Metrics Summary:"
+          echo "  Bugs: $BUGS"
+          echo "  Vulnerabilities: $VULNERABILITIES"
+          echo "  Security Hotspots: $SECURITY_HOTSPOTS"
+          echo "  Code Smells: $CODE_SMELLS"
+          echo "  Coverage: $COVERAGE%"
+          echo "  Duplicated Lines: $DUPLICATED_LINES%"
+          echo "  Lines of Code: $LINES_OF_CODE"
           
           echo "bugs=$BUGS" >> $GITHUB_OUTPUT
           echo "vulnerabilities=$VULNERABILITIES" >> $GITHUB_OUTPUT
@@ -265,9 +344,11 @@ jobs:
           fi
           
           # Create comment body
-          COMMENT_BODY="## 🔍 SonarCloud Analysis Results
+          COMMENT_BODY="## 🔍 SonarCloud Analysis Results (PR #$PR_NUMBER)
 
           $STATUS_MESSAGE
+
+          > 🎯 **PR-Specific Analysis**: This analysis focuses only on the changes introduced in this pull request, not the entire project."
 
           ### 📊 Code Quality Metrics
           | Metric | Value | Status |
@@ -287,7 +368,8 @@ jobs:
 
           ### 🔗 Links
           - [📊 View detailed report on SonarCloud](https://sonarcloud.io/project/overview?id=create-pull-request)
-          - [🎯 View pull request analysis](https://sonarcloud.io/project/pull_requests?id=create-pull-request)
+          - [🎯 View this PR analysis](https://sonarcloud.io/project/pull_requests?id=create-pull-request&pullRequest=$PR_NUMBER)
+          - [📋 View all pull request analyses](https://sonarcloud.io/project/pull_requests?id=create-pull-request)
 
           ---
           *This comment was automatically generated by the SonarCloud workflow. The workflow will always pass - use this feedback to improve code quality.*"
