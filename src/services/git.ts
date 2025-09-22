@@ -30,102 +30,82 @@ export class GitService {
   }
 
   async getChanges(baseBranch: string = CONFIG.DEFAULT_BRANCH, includeDetailedDiff: boolean = false): Promise<GitChanges> {
-    try {
-      // Get current branch
-      const currentBranch = await this.git.branch();
-      const current = currentBranch.current;
+    // Get current branch
+    const currentBranch = await this.git.branch();
+    const current = currentBranch.current;
 
-      if (current === baseBranch) {
-        throw new Error(`Cannot compare branch with itself. Current branch is '${baseBranch}'. Please checkout a feature branch.`);
-      }
-
-      // Get diff stats between base and current branch
-      const diffSummary = await this.git.diffSummary([`${baseBranch}...HEAD`]);
-
-      // Get commit messages
-      const log = await this.git.log({ from: baseBranch, to: 'HEAD' });
-      const commits = log.all.map(commit => commit.message);
-
-      // Process file changes
-      const files: FileChange[] = await Promise.all(
-        diffSummary.files.map(async (file) => {
-          const baseFileChange: FileChange = {
-            file: file.file,
-            status: this.mapGitStatus(file),
-            insertions: 'insertions' in file ? file.insertions : 0,
-            deletions: 'deletions' in file ? file.deletions : 0,
-            changes: 'changes' in file ? file.changes : 0
-          };
-
-          if (includeDetailedDiff) {
-            try {
-              const fileDiff = await this.git.diff([`${baseBranch}...HEAD`, '--', file.file]);
-              baseFileChange.diffContent = fileDiff;
-              baseFileChange.lineNumbers = this.extractLineNumbers(fileDiff);
-            } catch (error) {
-              // If we can't get diff for a specific file, continue without it
-            }
-          }
-
-          return baseFileChange;
-        })
-      );
-
-      return {
-        files,
-        totalInsertions: diffSummary.insertions,
-        totalDeletions: diffSummary.deletions,
-        totalFiles: files.length,
-        commits
-      };
-    } catch (error) {
-      throw new Error(`Failed to get git changes: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    if (current === baseBranch) {
+      throw new Error(`Cannot compare branch with itself. Current branch is '${baseBranch}'. Please checkout a feature branch.`);
     }
+
+    // Get diff stats between base and current branch
+    const diffSummary = await this.git.diffSummary([`${baseBranch}...HEAD`]);
+
+    // Get commit messages
+    const log = await this.git.log({ from: baseBranch, to: 'HEAD' });
+    const commits = log.all.map(commit => commit.message);
+
+    // Process file changes
+    const files: FileChange[] = await Promise.all(
+      diffSummary.files.map(async (file) => {
+        const baseFileChange: FileChange = {
+          file: file.file,
+          status: this.mapGitStatus(file),
+          insertions: 'insertions' in file ? file.insertions : 0,
+          deletions: 'deletions' in file ? file.deletions : 0,
+          changes: 'changes' in file ? file.changes : 0
+        };
+
+        if (includeDetailedDiff) {
+          try {
+            const fileDiff = await this.git.diff([`${baseBranch}...HEAD`, '--', file.file]);
+            baseFileChange.diffContent = fileDiff;
+            baseFileChange.lineNumbers = this.extractLineNumbers(fileDiff);
+          } catch (error) {
+            // If we can't get diff for a specific file, continue without it
+          }
+        }
+
+        return baseFileChange;
+      })
+    );
+
+    return {
+      files,
+      totalInsertions: diffSummary.insertions,
+      totalDeletions: diffSummary.deletions,
+      totalFiles: files.length,
+      commits
+    };
   }
 
   async getDiffContent(baseBranch: string = CONFIG.DEFAULT_BRANCH, maxLines: number = LIMITS.DEFAULT_MAX_DIFF_LINES): Promise<string> {
-    try {
-      const diff = await this.git.diff([`${baseBranch}...HEAD`]);
+    const diff = await this.git.diff([`${baseBranch}...HEAD`]);
 
-      // Limit diff content to prevent overwhelming the AI
-      const lines = diff.split('\n');
-      if (lines.length > maxLines) {
-        return lines.slice(0, maxLines).join('\n') + '\n\n... (diff truncated for brevity)';
-      }
-
-      return diff;
-    } catch (error) {
-      throw new Error(`Failed to get diff content: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    // Limit diff content to prevent overwhelming the AI
+    const lines = diff.split('\n');
+    if (lines.length > maxLines) {
+      return lines.slice(0, maxLines).join('\n') + '\n\n... (diff truncated for brevity)';
     }
+
+    return diff;
   }
 
   async getCurrentBranch(): Promise<string> {
-    try {
-      const branch = await this.git.branch();
-      return branch.current;
-    } catch (error) {
-      throw new Error(`Failed to get current branch: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    const branch = await this.git.branch();
+    return branch.current;
   }
 
   async validateRepository(): Promise<void> {
-    try {
-      const isRepo = await this.git.checkIsRepo();
-      if (!isRepo) {
-        throw new Error('Not in a git repository');
-      }
-    } catch (error) {
-      throw new Error(`Git repository validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    const isRepo = await this.git.checkIsRepo();
+    if (!isRepo) {
+      throw new Error('Not in a git repository');
     }
   }
 
   async hasUncommittedChanges(): Promise<boolean> {
-    try {
-      const status = await this.git.status();
-      return status.files.length > 0;
-    } catch (error) {
-      throw new Error(`Failed to check git status: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    const status = await this.git.status();
+    return status.files.length > 0;
   }
 
   async branchExists(branchName: string): Promise<boolean> {
@@ -200,11 +180,7 @@ export class GitService {
   }
 
   async pushCurrentBranch(): Promise<void> {
-    try {
-      const currentBranch = await this.getCurrentBranch();
-      await this.git.push('origin', currentBranch, ['--set-upstream']);
-    } catch (error) {
-      throw new Error(`Failed to push current branch: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    const currentBranch = await this.getCurrentBranch();
+    await this.git.push('origin', currentBranch, ['--set-upstream']);
   }
 }

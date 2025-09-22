@@ -53,7 +53,7 @@ describe('GitService', () => {
       mockGit.branch.mockRejectedValue(new Error('Git error'));
 
       await expect(gitService.getCurrentBranch()).rejects.toThrow(
-        'Failed to get current branch: Git error'
+        'Git error'
       );
     });
   });
@@ -78,7 +78,7 @@ describe('GitService', () => {
       mockGit.checkIsRepo.mockRejectedValue(new Error('Git command failed'));
 
       await expect(gitService.validateRepository()).rejects.toThrow(
-        'Git repository validation failed: Git command failed'
+        'Git command failed'
       );
     });
   });
@@ -125,7 +125,7 @@ describe('GitService', () => {
       mockGit.status.mockRejectedValue(new Error('Git status failed'));
 
       await expect(gitService.hasUncommittedChanges()).rejects.toThrow(
-        'Failed to check git status: Git status failed'
+        'Git status failed'
       );
     });
   });
@@ -205,7 +205,7 @@ describe('GitService', () => {
         current: 'feature/test-branch',
         all: ['main', 'feature/test-branch']
       } as any);
-      
+
       mockGit.diffSummary.mockResolvedValue(mockDiffSummary as any);
       mockGit.log.mockResolvedValue(mockLogResult as any);
     });
@@ -255,7 +255,7 @@ describe('GitService', () => {
       mockGit.diffSummary.mockRejectedValue(new Error('Git diff failed'));
 
       await expect(gitService.getChanges('main')).rejects.toThrow(
-        'Failed to get git changes: Git diff failed'
+        'Git diff failed'
       );
     });
   });
@@ -284,7 +284,7 @@ describe('GitService', () => {
       mockGit.diff.mockRejectedValue(new Error('Git diff failed'));
 
       await expect(gitService.getDiffContent('main')).rejects.toThrow(
-        'Failed to get diff content: Git diff failed'
+        'Git diff failed'
       );
     });
   });
@@ -295,7 +295,7 @@ describe('GitService', () => {
         current: 'feature/test-branch',
         all: ['main', 'feature/test-branch']
       } as any);
-      
+
       mockGit.push.mockResolvedValue(undefined as any);
 
       await gitService.pushCurrentBranch();
@@ -308,11 +308,11 @@ describe('GitService', () => {
         current: 'feature/test-branch',
         all: ['main', 'feature/test-branch']
       } as any);
-      
+
       mockGit.push.mockRejectedValue(new Error('Push failed'));
 
       await expect(gitService.pushCurrentBranch()).rejects.toThrow(
-        'Failed to push current branch: Push failed'
+        'Push failed'
       );
     });
   });
