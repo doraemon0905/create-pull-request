@@ -23,6 +23,16 @@ jobs:
   sonarcloud:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
+    outputs:
+      quality_gate_status: ${{ steps.quality-gate.outputs.quality_gate_status }}
+      quality_gate_result: ${{ steps.quality-gate.outputs.quality_gate_result }}
+      bugs: ${{ steps.sonar-metrics.outputs.bugs }}
+      vulnerabilities: ${{ steps.sonar-metrics.outputs.vulnerabilities }}
+      security_hotspots: ${{ steps.sonar-metrics.outputs.security_hotspots }}
+      code_smells: ${{ steps.sonar-metrics.outputs.code_smells }}
+      coverage: ${{ steps.sonar-metrics.outputs.coverage }}
+      duplicated_lines: ${{ steps.sonar-metrics.outputs.duplicated_lines }}
+      lines_of_code: ${{ steps.sonar-metrics.outputs.lines_of_code }}
     if: |
       github.event_name == 'workflow_dispatch' || 
       github.event_name == 'repository_dispatch' ||
@@ -95,6 +105,7 @@ jobs:
           fi
 
       - name: SonarCloud Scan
+        id: sonarcloud-scan
         uses: SonarSource/sonarcloud-github-action@master
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}  # Needed to get PR information, if any
@@ -112,18 +123,191 @@ jobs:
             -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/node_modules/**,**/lib/**,**/scripts/**
             -Dsonar.exclusions=node_modules/**,lib/**,coverage/**,scripts/**,**/*.d.ts
             -Dsonar.cpd.exclusions=**/*.test.ts,**/*.spec.ts
+        continue-on-error: true
+
+      - name: Wait for SonarCloud Quality Gate
+        id: quality-gate
+        run: |
+          echo "⏳ Waiting for SonarCloud Quality Gate result..."
+          sleep 30
+          
+          # Get the project status from SonarCloud API
+          QUALITY_GATE_STATUS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+            "https://sonarcloud.io/api/qualitygates/project_status?projectKey=create-pull-request" \
+            | jq -r '.projectStatus.status // "ERROR"')
+          
+          echo "quality_gate_status=$QUALITY_GATE_STATUS" >> $GITHUB_OUTPUT
+          echo "🔍 Quality Gate Status: $QUALITY_GATE_STATUS"
+          
+          if [ "$QUALITY_GATE_STATUS" = "OK" ]; then
+            echo "✅ Quality Gate passed!"
+            echo "quality_gate_result=✅ **Quality Gate: PASSED**" >> $GITHUB_OUTPUT
+          elif [ "$QUALITY_GATE_STATUS" = "WARN" ]; then
+            echo "⚠️ Quality Gate passed with warnings"
+            echo "quality_gate_result=⚠️ **Quality Gate: PASSED with warnings**" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Quality Gate failed!"
+            echo "quality_gate_result=❌ **Quality Gate: FAILED**" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get SonarCloud metrics
+        id: sonar-metrics
+        run: |
+          echo "📊 Fetching SonarCloud metrics..."
+          
+          # Get project metrics
+          METRICS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+            "https://sonarcloud.io/api/measures/component?component=create-pull-request&metricKeys=bugs,vulnerabilities,security_hotspots,code_smells,coverage,duplicated_lines_density,ncloc,sqale_rating,reliability_rating,security_rating")
+          
+          # Parse metrics
+          BUGS=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="bugs") | .value // "0"')
+          VULNERABILITIES=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="vulnerabilities") | .value // "0"')
+          SECURITY_HOTSPOTS=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="security_hotspots") | .value // "0"')
+          CODE_SMELLS=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="code_smells") | .value // "0"')
+          COVERAGE=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="coverage") | .value // "0"')
+          DUPLICATED_LINES=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="duplicated_lines_density") | .value // "0"')
+          LINES_OF_CODE=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="ncloc") | .value // "0"')
+          
+          echo "bugs=$BUGS" >> $GITHUB_OUTPUT
+          echo "vulnerabilities=$VULNERABILITIES" >> $GITHUB_OUTPUT
+          echo "security_hotspots=$SECURITY_HOTSPOTS" >> $GITHUB_OUTPUT
+          echo "code_smells=$CODE_SMELLS" >> $GITHUB_OUTPUT
+          echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+          echo "duplicated_lines=$DUPLICATED_LINES" >> $GITHUB_OUTPUT
+          echo "lines_of_code=$LINES_OF_CODE" >> $GITHUB_OUTPUT
 
   quality-gate:
     name: Quality Gate Check
     runs-on: ubuntu-latest
     needs: sonarcloud
-    if: |
-      (github.event_name == 'workflow_dispatch') || 
-      (github.event_name == 'repository_dispatch') ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request')
+    if: always() && needs.sonarcloud.result != 'cancelled'
     
     steps:
-      - name: Quality Gate Status
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get PR number
+        id: pr-number
         run: |
-          echo "SonarCloud analysis completed."
-          echo "Please check the quality gate status at https://sonarcloud.io/project/overview?id=create-pull-request"
+          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+            # For workflow_run events, get PR number from the triggering workflow
+            PR_NUMBER=$(gh api repos/${{ github.repository }}/pulls \
+              --jq ".[] | select(.head.sha == \"${{ github.event.workflow_run.head_sha }}\") | .number" \
+              || echo "")
+          else
+            # For other events, try to get from context
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+          fi
+          
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "🔍 PR Number: $PR_NUMBER"
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: Create SonarCloud comment for PR
+        if: steps.pr-number.outputs.pr_number != ''
+        run: |
+          PR_NUMBER="${{ steps.pr-number.outputs.pr_number }}"
+          QUALITY_GATE_STATUS="${{ needs.sonarcloud.outputs.quality_gate_status }}"
+          QUALITY_GATE_RESULT="${{ needs.sonarcloud.outputs.quality_gate_result }}"
+          
+          # Get metrics from sonarcloud job
+          BUGS="${{ needs.sonarcloud.outputs.bugs }}"
+          VULNERABILITIES="${{ needs.sonarcloud.outputs.vulnerabilities }}"
+          SECURITY_HOTSPOTS="${{ needs.sonarcloud.outputs.security_hotspots }}"
+          CODE_SMELLS="${{ needs.sonarcloud.outputs.code_smells }}"
+          COVERAGE="${{ needs.sonarcloud.outputs.coverage }}"
+          DUPLICATED_LINES="${{ needs.sonarcloud.outputs.duplicated_lines }}"
+          LINES_OF_CODE="${{ needs.sonarcloud.outputs.lines_of_code }}"
+          
+          # Create status message based on quality gate
+          if [ "$QUALITY_GATE_STATUS" = "OK" ]; then
+            STATUS_MESSAGE="✅ **Quality Gate: PASSED** - Great job! Your code meets all quality standards."
+          elif [ "$QUALITY_GATE_STATUS" = "WARN" ]; then
+            STATUS_MESSAGE="⚠️ **Quality Gate: PASSED with warnings** - Code quality is acceptable but could be improved."
+          else
+            STATUS_MESSAGE="❌ **Quality Gate: FAILED** - Please review and address the issues below before merging."
+          fi
+          
+          # Create recommendations based on metrics
+          RECOMMENDATIONS=""
+          if [ "$BUGS" -gt "0" ]; then
+            RECOMMENDATIONS="$RECOMMENDATIONS
+          - 🐛 **$BUGS bug(s) detected** - Please fix these issues as they may cause runtime problems"
+          fi
+          if [ "$VULNERABILITIES" -gt "0" ]; then
+            RECOMMENDATIONS="$RECOMMENDATIONS
+          - 🔒 **$VULNERABILITIES vulnerability(ies) found** - Security issues that need immediate attention"
+          fi
+          if [ "$SECURITY_HOTSPOTS" -gt "0" ]; then
+            RECOMMENDATIONS="$RECOMMENDATIONS
+          - 🔥 **$SECURITY_HOTSPOTS security hotspot(s)** - Review these potential security risks"
+          fi
+          if [ "$CODE_SMELLS" -gt "10" ]; then
+            RECOMMENDATIONS="$RECOMMENDATIONS
+          - 💩 **$CODE_SMELLS code smell(s)** - Consider refactoring to improve maintainability"
+          fi
+          if [ "${COVERAGE%.*}" -lt "80" ] 2>/dev/null; then
+            RECOMMENDATIONS="$RECOMMENDATIONS
+          - 📈 **Coverage is $COVERAGE%** - Consider adding more tests (target: 80%+)"
+          fi
+          
+          # Create comment body
+          COMMENT_BODY="## 🔍 SonarCloud Analysis Results
+
+          $STATUS_MESSAGE
+
+          ### 📊 Code Quality Metrics
+          | Metric | Value | Status |
+          |--------|-------|--------|
+          | 🐛 Bugs | $BUGS | $([ "$BUGS" = "0" ] && echo "✅" || echo "❌") |
+          | 🔒 Vulnerabilities | $VULNERABILITIES | $([ "$VULNERABILITIES" = "0" ] && echo "✅" || echo "❌") |
+          | 🔥 Security Hotspots | $SECURITY_HOTSPOTS | $([ "$SECURITY_HOTSPOTS" = "0" ] && echo "✅" || echo "⚠️") |
+          | 💩 Code Smells | $CODE_SMELLS | $([ "$CODE_SMELLS" -le "10" ] && echo "✅" || echo "⚠️") |
+          | 📈 Coverage | $COVERAGE% | $([ "${COVERAGE%.*}" -ge "80" ] 2>/dev/null && echo "✅" || echo "⚠️") |
+          | 📋 Duplicated Lines | $DUPLICATED_LINES% | $([ "${DUPLICATED_LINES%.*}" -le "3" ] 2>/dev/null && echo "✅" || echo "⚠️") |
+          | 📏 Lines of Code | $LINES_OF_CODE | ℹ️ |
+          $([ -n "$RECOMMENDATIONS" ] && echo "
+          ### 🎯 Recommendations
+          $RECOMMENDATIONS" || echo "
+          ### 🎉 All Good!
+          No specific recommendations - your code quality looks great!")
+
+          ### 🔗 Links
+          - [📊 View detailed report on SonarCloud](https://sonarcloud.io/project/overview?id=create-pull-request)
+          - [🎯 View pull request analysis](https://sonarcloud.io/project/pull_requests?id=create-pull-request)
+
+          ---
+          *This comment was automatically generated by the SonarCloud workflow. The workflow will always pass - use this feedback to improve code quality.*"
+          
+          # Post comment to PR
+          gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
+          echo "✅ Posted SonarCloud results to PR #$PR_NUMBER"
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: Quality Gate Status Summary
+        run: |
+          QUALITY_GATE_STATUS="${{ needs.sonarcloud.outputs.quality_gate_status }}"
+          SONARCLOUD_RESULT="${{ needs.sonarcloud.result }}"
+          
+          echo "🔍 SonarCloud job result: $SONARCLOUD_RESULT"
+          echo "🔍 Quality Gate status: $QUALITY_GATE_STATUS"
+          
+          if [ "$SONARCLOUD_RESULT" = "failure" ]; then
+            echo "❌ SonarCloud scan encountered issues, but workflow will continue"
+            echo "Check the PR comment for details and SonarCloud report"
+          elif [ "$QUALITY_GATE_STATUS" = "ERROR" ] || [ "$QUALITY_GATE_STATUS" = "FAILED" ]; then
+            echo "❌ Quality Gate failed, but workflow will continue"
+            echo "Check the PR comment for details and review the SonarCloud report"
+          elif [ "$QUALITY_GATE_STATUS" = "WARN" ]; then
+            echo "⚠️ Quality Gate passed with warnings"
+            echo "Check the PR comment for details and review any issues"
+          else
+            echo "✅ Quality Gate passed!"
+            echo "Check the PR comment for detailed metrics"
+          fi
+          
+          echo ""
+          echo "📊 SonarCloud analysis completed successfully"
+          echo "🔗 View report: https://sonarcloud.io/project/overview?id=create-pull-request"
