@@ -9,8 +9,8 @@ on:
 
 jobs:
   auto-version:
-    # Only run when PR is merged or direct push to main, but skip if it's an auto version update PR
-    if: (github.event_name == 'push') || (github.event.pull_request.merged == true && !contains(github.event.pull_request.title, 'Auto version update'))
+    # Only run when PR is merged or direct push to main, but skip if it's an auto version update PR or dependabot PR
+    if: (github.event_name == 'push') || (github.event.pull_request.merged == true && !contains(github.event.pull_request.title, 'Auto version update') && github.event.pull_request.user.login != 'dependabot[bot]')
     runs-on: ubuntu-latest
     
     permissions:
@@ -184,7 +184,7 @@ jobs:
 
   # Create tag and release when version update PR is merged
   post-merge-release:
-    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && contains(github.event.pull_request.title, 'Auto version update')
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && contains(github.event.pull_request.title, 'Auto version update') && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     
     permissions:
@@ -252,7 +252,7 @@ jobs:
   trigger-publish:
     needs: post-merge-release
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && contains(github.event.pull_request.title, 'Auto version update')
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && contains(github.event.pull_request.title, 'Auto version update') && github.event.pull_request.user.login != 'dependabot[bot]'
     
     steps:
       - name: 🚀 Trigger Publish Workflow
