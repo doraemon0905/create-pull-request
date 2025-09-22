@@ -12,29 +12,24 @@ export function validateEnvironment(): void {
 
 export function getConfigValue(key: string): string | undefined {
   // Map legacy environment variable names to new config structure
-  try {
-    switch (key) {
-      case 'JIRA_BASE_URL':
-        return getConfigValueFromConfig('jira', 'baseUrl') || undefined;
-      case 'JIRA_USERNAME':
-        return getConfigValueFromConfig('jira', 'username') || undefined;
-      case 'JIRA_API_TOKEN':
-        return getConfigValueFromConfig('jira', 'apiToken') || undefined;
-      case 'GITHUB_TOKEN':
-        return getConfigValueFromConfig('github', 'token') || undefined;
-      case 'COPILOT_API_TOKEN':
-        return getConfigValueFromConfig('copilot', 'apiToken') || undefined;
-      case 'DEFAULT_BRANCH':
-        return getConfigValueFromConfig('github', 'defaultBranch') || undefined;
-      case 'JIRA_PROJECT_KEY':
-        return getConfigValueFromConfig('jira', 'projectKey') || undefined;
-      default:
-        // For other environment variables, fall back to process.env
-        return process.env[key];
-    }
-  } catch {
-    // If config loading fails, fall back to environment variables
-    return process.env[key];
+  switch (key) {
+    case 'JIRA_BASE_URL':
+      return getConfigValueFromConfig('jira', 'baseUrl') || undefined;
+    case 'JIRA_USERNAME':
+      return getConfigValueFromConfig('jira', 'username') || undefined;
+    case 'JIRA_API_TOKEN':
+      return getConfigValueFromConfig('jira', 'apiToken') || undefined;
+    case 'GITHUB_TOKEN':
+      return getConfigValueFromConfig('github', 'token') || undefined;
+    case 'COPILOT_API_TOKEN':
+      return getConfigValueFromConfig('copilot', 'apiToken') || undefined;
+    case 'DEFAULT_BRANCH':
+      return getConfigValueFromConfig('github', 'defaultBranch') || undefined;
+    case 'JIRA_PROJECT_KEY':
+      return getConfigValueFromConfig('jira', 'projectKey') || undefined;
+    default:
+      // For other environment variables, fall back to process.env
+      return process.env[key];
   }
 }
 
@@ -56,7 +51,7 @@ export function extractJiraTicketFromBranch(branchName: string): string | null {
 
 export function validateGitRepository(): void {
   const { execSync } = require('child_process');
-  
+
   try {
     execSync('git rev-parse --is-inside-work-tree', { stdio: 'ignore' });
   } catch {
@@ -83,7 +78,7 @@ export function sanitizeInput(input: string): string {
   if (!input || typeof input !== 'string') {
     return '';
   }
-  
+
   return input
     .replace(/[<>]/g, '') // Remove potential HTML tags
     .replace(/[&"']/g, '') // Remove potentially dangerous characters
