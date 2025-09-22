@@ -1,6 +1,6 @@
 {
   "name": "publish-pull-request",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "CLI tool to automatically generate pull request descriptions based on Jira tickets and file changes using GitHub Copilot API",
   "main": "lib/index.js",
   "bin": {
@@ -43,7 +43,7 @@
     "axios": "^1.5.0",
     "chalk": "^4.1.2",
     "commander": "^14.0.0",
-    "dotenv": "^16.3.1",
+    "dotenv": "^17.2.2",
     "inquirer": "^12.9.6",
     "ora": "^5.4.1",
     "simple-git": "^3.20.0"
