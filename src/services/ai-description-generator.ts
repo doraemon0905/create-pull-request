@@ -373,7 +373,6 @@ export class AIDescriptionGeneratorService {
       summaryPrompt += `- Preserve all headers, formatting, and structural elements from the template\n`;
     }
 
-    try {
       const response = await this.callAIAPI(summaryPrompt, targetProvider);
       let content = this.extractContentFromResponse(response, targetProvider);
 
@@ -398,10 +397,6 @@ export class AIDescriptionGeneratorService {
       const finalSummary = content.trim().replace(/["']/g, ''); // Remove quotes
 
       return finalSummary;
-    } catch (_error) {
-      // Enhanced fallback summary with file details
-      return this.generateEnhancedFallbackSummary(jiraTicket, gitChanges, repoInfo);
-    }
   }
 
   private buildPrompt(options: GenerateDescriptionOptions, summary?: string): string {
