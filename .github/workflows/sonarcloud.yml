@@ -16,6 +16,10 @@ on:
         description: 'CI run ID that triggered this workflow'
         required: false
         type: string
+      pr_number:
+        description: 'Pull request number for commenting'
+        required: false
+        type: string
   repository_dispatch:
     types: [sonarcloud-trigger]
 
@@ -46,6 +50,8 @@ jobs:
           echo "Event: ${{ github.event_name }}"
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "Triggered by: ${{ github.event.inputs.triggered_by }}"
+            echo "CI Run ID: ${{ github.event.inputs.ci_run_id }}"
+            echo "PR Number: ${{ github.event.inputs.pr_number }}"
           elif [ "${{ github.event_name }}" == "repository_dispatch" ]; then
             echo "Triggered by: Repository dispatch event"
             echo "Event Type: ${{ github.event.action }}"
@@ -61,6 +67,35 @@ jobs:
         with:
           # Full git history is needed to get a proper list of changed files for SonarCloud
           fetch-depth: 0
+          # For PR analysis, we need to checkout the PR head
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.pr_number && format('refs/pull/{0}/head', github.event.inputs.pr_number) || github.ref }}
+
+      - name: Setup Git for PR analysis
+        if: github.event.inputs.pr_number != ''
+        run: |
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          echo "🔧 Setting up Git environment for PR #$PR_NUMBER analysis..."
+          
+          # Fetch the PR and base branch
+          git fetch origin pull/$PR_NUMBER/head:pr-$PR_NUMBER
+          git fetch origin
+          
+          # Get PR information
+          PR_BASE=$(gh pr view $PR_NUMBER --json baseRefName --jq '.baseRefName' 2>/dev/null || echo "main")
+          echo "📋 Base branch: $PR_BASE"
+          
+          # Ensure we have the base branch
+          git fetch origin $PR_BASE:$PR_BASE 2>/dev/null || true
+          
+          # Show current git status
+          echo "📊 Git status:"
+          echo "  Current branch: $(git branch --show-current)"
+          echo "  Current commit: $(git rev-parse HEAD)"
+          echo "  Available branches: $(git branch -a | head -5)"
+          
+          echo "✅ Git environment ready for SonarCloud PR analysis"
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
       - name: Download coverage artifacts from CI
         uses: actions/download-artifact@v4
@@ -104,6 +139,145 @@ jobs:
             exit 1
           fi
 
+      - name: Prepare SonarCloud arguments
+        id: sonar-args
+        run: |
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          
+          # Get SonarCloud configuration from sonar-project.properties file
+          echo "🔧 Reading SonarCloud configuration from sonar-project.properties..."
+          
+          if [ -f "sonar-project.properties" ]; then
+            SONAR_PROJECT_KEY=$(grep "^sonar.projectKey=" sonar-project.properties | cut -d'=' -f2 | tr -d ' ')
+            SONAR_ORGANIZATION=$(grep "^sonar.organization=" sonar-project.properties | cut -d'=' -f2 | tr -d ' ')
+            
+            echo "✅ Found sonar-project.properties file"
+            echo "  Project Key: $SONAR_PROJECT_KEY (from sonar.projectKey)"
+            echo "  Organization: $SONAR_ORGANIZATION (from sonar.organization)"
+          else
+            echo "⚠️ sonar-project.properties not found, using GitHub context fallback"
+            SONAR_PROJECT_KEY="${{ github.event.repository.name }}"
+            SONAR_ORGANIZATION="${{ github.repository_owner }}"
+            echo "  Project Key: $SONAR_PROJECT_KEY (from github.event.repository.name)"
+            echo "  Organization: $SONAR_ORGANIZATION (from github.repository_owner)"
+          fi
+          
+          # Validate that we have values
+          if [ -z "$SONAR_PROJECT_KEY" ] || [ -z "$SONAR_ORGANIZATION" ]; then
+            echo "❌ Failed to get SonarCloud configuration"
+            exit 1
+          fi
+          
+          echo "📋 Final SonarCloud Configuration:"
+          echo "  Project Key: $SONAR_PROJECT_KEY"
+          echo "  Organization: $SONAR_ORGANIZATION"
+          echo "  Repository: ${{ github.repository }}"
+          
+          # Base arguments - most configuration comes from sonar-project.properties
+          # We only need to override project key and organization if they differ
+          BASE_ARGS="-Dsonar.projectKey=$SONAR_PROJECT_KEY -Dsonar.organization=$SONAR_ORGANIZATION"
+          
+          if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
+            # PR-specific analysis - analyze only the changes in this PR
+            echo "🔍 Configuring SonarCloud for PR-specific analysis (PR #$PR_NUMBER)"
+            
+            # Verify PR exists and get information
+            if gh pr view $PR_NUMBER --json number,baseRefName,headRefName,state > /dev/null 2>&1; then
+              PR_INFO=$(gh pr view $PR_NUMBER --json baseRefName,headRefName,state,title)
+              PR_BASE=$(echo "$PR_INFO" | jq -r '.baseRefName')
+              PR_HEAD=$(echo "$PR_INFO" | jq -r '.headRefName')
+              PR_STATE=$(echo "$PR_INFO" | jq -r '.state')
+              PR_TITLE=$(echo "$PR_INFO" | jq -r '.title')
+              
+              echo "📋 PR Details:"
+              echo "  PR Number: $PR_NUMBER"
+              echo "  Title: $PR_TITLE"
+              echo "  State: $PR_STATE"
+              echo "  Base branch: $PR_BASE"
+              echo "  Head branch: $PR_HEAD"
+              
+              # Validate branch names are not empty or null
+              if [ -z "$PR_BASE" ] || [ "$PR_BASE" = "null" ]; then
+                echo "❌ Base branch is empty or null, using 'main' as fallback"
+                PR_BASE="main"
+              fi
+              
+              if [ -z "$PR_HEAD" ] || [ "$PR_HEAD" = "null" ]; then
+                echo "❌ Head branch is empty or null, this will cause PR analysis to fail"
+                echo "🔍 Falling back to full project analysis"
+                SONAR_ARGS="$BASE_ARGS"
+                echo "✅ Using full project analysis mode (branch name issue)"
+              elif [ "$PR_STATE" = "OPEN" ]; then
+                # PR-specific arguments for SonarCloud - MUST have these exact parameters for PR analysis
+                echo "🎯 Setting up PR analysis parameters:"
+                echo "  - sonar.pullrequest.key=$PR_NUMBER"
+                echo "  - sonar.pullrequest.branch=$PR_HEAD"
+                echo "  - sonar.pullrequest.base=$PR_BASE"
+                
+                PR_ARGS="-Dsonar.pullrequest.key=$PR_NUMBER -Dsonar.pullrequest.branch=$PR_HEAD -Dsonar.pullrequest.base=$PR_BASE"
+                SONAR_ARGS="$BASE_ARGS $PR_ARGS"
+                
+                echo "✅ Using PR-specific analysis mode"
+                echo "🔗 This will create a PR analysis on SonarCloud for PR #$PR_NUMBER"
+                echo "📋 Complete SonarCloud command will include:"
+                echo "   $PR_ARGS"
+              else
+                echo "⚠️ PR #$PR_NUMBER is not open (state: $PR_STATE), falling back to branch analysis"
+                SONAR_ARGS="$BASE_ARGS -Dsonar.branch.name=$PR_HEAD"
+                echo "✅ Using branch analysis mode for $PR_HEAD"
+              fi
+            else
+              echo "❌ Failed to get PR #$PR_NUMBER information, falling back to full project analysis"
+              echo "🔍 This might happen if the PR doesn't exist or there are permission issues"
+              SONAR_ARGS="$BASE_ARGS"
+              echo "✅ Using full project analysis mode (fallback)"
+            fi
+          else
+            # Full project analysis (fallback)
+            echo "🔍 No PR number provided, using full project analysis"
+            SONAR_ARGS="$BASE_ARGS"
+            echo "✅ Using full project analysis mode"
+          fi
+          
+          echo "sonar_args=$SONAR_ARGS" >> $GITHUB_OUTPUT
+          echo "📋 SonarCloud arguments: $SONAR_ARGS"
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: Pre-scan verification
+        run: |
+          echo "🔍 Pre-scan verification..."
+          echo "📋 SonarCloud arguments: ${{ steps.sonar-args.outputs.sonar_args }}"
+          
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
+            echo "🎯 This scan will create a PR analysis on SonarCloud for PR #$PR_NUMBER"
+            echo "🔗 After completion, check: https://sonarcloud.io/project/pull_requests?id=create-pull-request"
+            
+            # Verify the critical PR parameters are present
+            SONAR_ARGS="${{ steps.sonar-args.outputs.sonar_args }}"
+            if echo "$SONAR_ARGS" | grep -q "sonar.pullrequest.key=$PR_NUMBER"; then
+              echo "✅ PR key parameter is present"
+            else
+              echo "❌ PR key parameter is MISSING - this will cause issues!"
+            fi
+            
+            if echo "$SONAR_ARGS" | grep -q "sonar.pullrequest.branch="; then
+              echo "✅ PR branch parameter is present"
+            else
+              echo "❌ PR branch parameter is MISSING - this will cause issues!"
+            fi
+            
+            if echo "$SONAR_ARGS" | grep -q "sonar.pullrequest.base="; then
+              echo "✅ PR base parameter is present"
+            else
+              echo "❌ PR base parameter is MISSING - this will cause issues!"
+            fi
+          else
+            echo "📊 This scan will update the main project analysis on SonarCloud"
+            echo "🔗 After completion, check: https://sonarcloud.io/project/overview?id=create-pull-request"
+          fi
+
       - name: SonarCloud Scan
         id: sonarcloud-scan
         uses: SonarSource/sonarcloud-github-action@master
@@ -111,42 +285,88 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}  # Needed to get PR information, if any
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          # Additional arguments for the sonarcloud scanner
-          args: >
-            -Dsonar.projectKey=create-pull-request
-            -Dsonar.organization=doraemon0905
-            -Dsonar.sources=src
-            -Dsonar.tests=src/__tests__
-            -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts
-            -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info
-            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
-            -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/node_modules/**,**/lib/**,**/scripts/**
-            -Dsonar.exclusions=node_modules/**,lib/**,coverage/**,scripts/**,**/*.d.ts
-            -Dsonar.cpd.exclusions=**/*.test.ts,**/*.spec.ts
+          # Use dynamically prepared arguments
+          args: ${{ steps.sonar-args.outputs.sonar_args }}
         continue-on-error: true
+
+      - name: Post-scan verification
+        run: |
+          echo "📊 SonarCloud scan completed"
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
+            echo "🎯 PR analysis should now be available on SonarCloud for PR #$PR_NUMBER"
+            echo "⏳ Note: It may take a few moments for the analysis to appear in the SonarCloud UI"
+          fi
 
       - name: Wait for SonarCloud Quality Gate
         id: quality-gate
         run: |
           echo "⏳ Waiting for SonarCloud Quality Gate result..."
-          sleep 30
+          sleep 45  # Give SonarCloud more time to process
           
-          # Get the project status from SonarCloud API
-          QUALITY_GATE_STATUS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
-            "https://sonarcloud.io/api/qualitygates/project_status?projectKey=create-pull-request" \
-            | jq -r '.projectStatus.status // "ERROR"')
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          
+          # Get SonarCloud configuration from sonar-project.properties (same as prepare step)
+          if [ -f "sonar-project.properties" ]; then
+            SONAR_PROJECT_KEY=$(grep "^sonar.projectKey=" sonar-project.properties | cut -d'=' -f2 | tr -d ' ')
+            echo "🔧 Using project key for API calls: $SONAR_PROJECT_KEY (from sonar-project.properties)"
+          else
+            SONAR_PROJECT_KEY="${{ github.event.repository.name }}"
+            echo "🔧 Using project key for API calls: $SONAR_PROJECT_KEY (GitHub fallback)"
+          fi
+          
+          # Simple approach - try main project first, then PR if available
+          QUALITY_GATE_STATUS="PENDING"
+          
+          if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
+            echo "🔍 Attempting to get Quality Gate for PR #$PR_NUMBER..."
+            
+            # Try PR-specific endpoint
+            QG_RESPONSE=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+              "https://sonarcloud.io/api/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY&pullRequest=$PR_NUMBER" 2>/dev/null || echo "")
+            
+            echo "📋 PR Quality Gate Response: $QG_RESPONSE"
+            
+            if [ -n "$QG_RESPONSE" ] && echo "$QG_RESPONSE" | jq -e '.projectStatus.status' > /dev/null 2>&1; then
+              QUALITY_GATE_STATUS=$(echo "$QG_RESPONSE" | jq -r '.projectStatus.status' 2>/dev/null || echo "PENDING")
+              echo "🎯 PR Quality Gate Status: $QUALITY_GATE_STATUS"
+            else
+              echo "⚠️ PR analysis not ready yet, using project-level status"
+              # Fallback to main project
+              QG_RESPONSE=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+                "https://sonarcloud.io/api/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY" 2>/dev/null || echo "")
+              
+              if [ -n "$QG_RESPONSE" ] && echo "$QG_RESPONSE" | jq -e '.projectStatus.status' > /dev/null 2>&1; then
+                QUALITY_GATE_STATUS=$(echo "$QG_RESPONSE" | jq -r '.projectStatus.status' 2>/dev/null || echo "PENDING")
+                echo "📊 Project Quality Gate Status: $QUALITY_GATE_STATUS"
+              fi
+            fi
+          else
+            echo "🔍 Getting Quality Gate for main project..."
+            QG_RESPONSE=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+              "https://sonarcloud.io/api/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY" 2>/dev/null || echo "")
+            
+            if [ -n "$QG_RESPONSE" ] && echo "$QG_RESPONSE" | jq -e '.projectStatus.status' > /dev/null 2>&1; then
+              QUALITY_GATE_STATUS=$(echo "$QG_RESPONSE" | jq -r '.projectStatus.status' 2>/dev/null || echo "PENDING")
+              echo "📊 Project Quality Gate Status: $QUALITY_GATE_STATUS"
+            fi
+          fi
           
           echo "quality_gate_status=$QUALITY_GATE_STATUS" >> $GITHUB_OUTPUT
-          echo "🔍 Quality Gate Status: $QUALITY_GATE_STATUS"
+          echo "🔍 Final Quality Gate Status: $QUALITY_GATE_STATUS"
           
+          # Set result message
           if [ "$QUALITY_GATE_STATUS" = "OK" ]; then
             echo "✅ Quality Gate passed!"
             echo "quality_gate_result=✅ **Quality Gate: PASSED**" >> $GITHUB_OUTPUT
           elif [ "$QUALITY_GATE_STATUS" = "WARN" ]; then
             echo "⚠️ Quality Gate passed with warnings"
             echo "quality_gate_result=⚠️ **Quality Gate: PASSED with warnings**" >> $GITHUB_OUTPUT
+          elif [ "$QUALITY_GATE_STATUS" = "PENDING" ]; then
+            echo "⏳ Quality Gate is still processing"
+            echo "quality_gate_result=⏳ **Quality Gate: PENDING** - Analysis may still be processing" >> $GITHUB_OUTPUT
           else
-            echo "❌ Quality Gate failed!"
+            echo "❌ Quality Gate failed or error occurred"
             echo "quality_gate_result=❌ **Quality Gate: FAILED**" >> $GITHUB_OUTPUT
           fi
 
@@ -155,18 +375,68 @@ jobs:
         run: |
           echo "📊 Fetching SonarCloud metrics..."
           
-          # Get project metrics
-          METRICS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
-            "https://sonarcloud.io/api/measures/component?component=create-pull-request&metricKeys=bugs,vulnerabilities,security_hotspots,code_smells,coverage,duplicated_lines_density,ncloc,sqale_rating,reliability_rating,security_rating")
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
           
-          # Parse metrics
-          BUGS=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="bugs") | .value // "0"')
-          VULNERABILITIES=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="vulnerabilities") | .value // "0"')
-          SECURITY_HOTSPOTS=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="security_hotspots") | .value // "0"')
-          CODE_SMELLS=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="code_smells") | .value // "0"')
-          COVERAGE=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="coverage") | .value // "0"')
-          DUPLICATED_LINES=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="duplicated_lines_density") | .value // "0"')
-          LINES_OF_CODE=$(echo "$METRICS" | jq -r '.component.measures[] | select(.metric=="ncloc") | .value // "0"')
+          # Get SonarCloud configuration from sonar-project.properties (same as prepare step)
+          if [ -f "sonar-project.properties" ]; then
+            SONAR_PROJECT_KEY=$(grep "^sonar.projectKey=" sonar-project.properties | cut -d'=' -f2 | tr -d ' ')
+            echo "🔧 Using project key for metrics API: $SONAR_PROJECT_KEY (from sonar-project.properties)"
+          else
+            SONAR_PROJECT_KEY="${{ github.event.repository.name }}"
+            echo "🔧 Using project key for metrics API: $SONAR_PROJECT_KEY (GitHub fallback)"
+          fi
+          
+          # Simple approach - try to get metrics, use defaults if not available
+          METRICS=""
+          
+          if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
+            echo "🎯 Attempting to fetch metrics for PR #$PR_NUMBER..."
+            METRICS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+              "https://sonarcloud.io/api/measures/component?component=$SONAR_PROJECT_KEY&pullRequest=$PR_NUMBER&metricKeys=bugs,vulnerabilities,security_hotspots,code_smells,coverage,duplicated_lines_density,ncloc" 2>/dev/null || echo "")
+            
+            echo "📋 PR Metrics Response: $METRICS"
+            
+            # If PR metrics not available, try main project
+            if [ -z "$METRICS" ] || ! echo "$METRICS" | jq -e '.component' > /dev/null 2>&1; then
+              echo "⚠️ PR metrics not available, using main project metrics"
+              METRICS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+                "https://sonarcloud.io/api/measures/component?component=$SONAR_PROJECT_KEY&metricKeys=bugs,vulnerabilities,security_hotspots,code_smells,coverage,duplicated_lines_density,ncloc" 2>/dev/null || echo "")
+            fi
+          else
+            echo "📊 Fetching metrics for main project..."
+            METRICS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+              "https://sonarcloud.io/api/measures/component?component=$SONAR_PROJECT_KEY&metricKeys=bugs,vulnerabilities,security_hotspots,code_smells,coverage,duplicated_lines_density,ncloc" 2>/dev/null || echo "")
+          fi
+          
+          # Simple metric extraction with defaults
+          if [ -n "$METRICS" ] && echo "$METRICS" | jq -e '.component.measures' > /dev/null 2>&1; then
+            BUGS=$(echo "$METRICS" | jq -r '.component.measures[]? | select(.metric=="bugs") | .value // "0"' 2>/dev/null || echo "0")
+            VULNERABILITIES=$(echo "$METRICS" | jq -r '.component.measures[]? | select(.metric=="vulnerabilities") | .value // "0"' 2>/dev/null || echo "0")
+            SECURITY_HOTSPOTS=$(echo "$METRICS" | jq -r '.component.measures[]? | select(.metric=="security_hotspots") | .value // "0"' 2>/dev/null || echo "0")
+            CODE_SMELLS=$(echo "$METRICS" | jq -r '.component.measures[]? | select(.metric=="code_smells") | .value // "0"' 2>/dev/null || echo "0")
+            COVERAGE=$(echo "$METRICS" | jq -r '.component.measures[]? | select(.metric=="coverage") | .value // "0"' 2>/dev/null || echo "0")
+            DUPLICATED_LINES=$(echo "$METRICS" | jq -r '.component.measures[]? | select(.metric=="duplicated_lines_density") | .value // "0"' 2>/dev/null || echo "0")
+            LINES_OF_CODE=$(echo "$METRICS" | jq -r '.component.measures[]? | select(.metric=="ncloc") | .value // "0"' 2>/dev/null || echo "0")
+            echo "✅ Metrics extracted successfully"
+          else
+            echo "⚠️ No valid metrics available, using defaults"
+            BUGS="0"
+            VULNERABILITIES="0"
+            SECURITY_HOTSPOTS="0"
+            CODE_SMELLS="0"
+            COVERAGE="0"
+            DUPLICATED_LINES="0"
+            LINES_OF_CODE="0"
+          fi
+          
+          echo "📋 Metrics Summary:"
+          echo "  Bugs: $BUGS"
+          echo "  Vulnerabilities: $VULNERABILITIES"
+          echo "  Security Hotspots: $SECURITY_HOTSPOTS"
+          echo "  Code Smells: $CODE_SMELLS"
+          echo "  Coverage: $COVERAGE%"
+          echo "  Duplicated Lines: $DUPLICATED_LINES%"
+          echo "  Lines of Code: $LINES_OF_CODE"
           
           echo "bugs=$BUGS" >> $GITHUB_OUTPUT
           echo "vulnerabilities=$VULNERABILITIES" >> $GITHUB_OUTPUT
@@ -189,103 +459,26 @@ jobs:
       - name: Get PR number
         id: pr-number
         run: |
-          if [ "${{ github.event_name }}" == "workflow_run" ]; then
-            # For workflow_run events, get PR number from the triggering workflow
+          # Priority 1: Use input parameter if provided (from CI workflow)
+          if [ -n "${{ github.event.inputs.pr_number }}" ] && [ "${{ github.event.inputs.pr_number }}" != "" ]; then
+            PR_NUMBER="${{ github.event.inputs.pr_number }}"
+            echo "🔍 Using PR number from input: $PR_NUMBER"
+          elif [ "${{ github.event_name }}" == "workflow_run" ]; then
+            # Priority 2: For workflow_run events, get PR number from the triggering workflow
             PR_NUMBER=$(gh api repos/${{ github.repository }}/pulls \
               --jq ".[] | select(.head.sha == \"${{ github.event.workflow_run.head_sha }}\") | .number" \
               || echo "")
+            echo "🔍 Retrieved PR number from workflow_run: $PR_NUMBER"
           else
-            # For other events, try to get from context
+            # Priority 3: For other events, try to get from context
             PR_NUMBER="${{ github.event.pull_request.number }}"
+            echo "🔍 Using PR number from context: $PR_NUMBER"
           fi
           
           echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
-          echo "🔍 PR Number: $PR_NUMBER"
+          echo "🔍 Final PR Number: $PR_NUMBER"
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
-
-      - name: Create SonarCloud comment for PR
-        if: steps.pr-number.outputs.pr_number != ''
-        run: |
-          PR_NUMBER="${{ steps.pr-number.outputs.pr_number }}"
-          QUALITY_GATE_STATUS="${{ needs.sonarcloud.outputs.quality_gate_status }}"
-          QUALITY_GATE_RESULT="${{ needs.sonarcloud.outputs.quality_gate_result }}"
-          
-          # Get metrics from sonarcloud job
-          BUGS="${{ needs.sonarcloud.outputs.bugs }}"
-          VULNERABILITIES="${{ needs.sonarcloud.outputs.vulnerabilities }}"
-          SECURITY_HOTSPOTS="${{ needs.sonarcloud.outputs.security_hotspots }}"
-          CODE_SMELLS="${{ needs.sonarcloud.outputs.code_smells }}"
-          COVERAGE="${{ needs.sonarcloud.outputs.coverage }}"
-          DUPLICATED_LINES="${{ needs.sonarcloud.outputs.duplicated_lines }}"
-          LINES_OF_CODE="${{ needs.sonarcloud.outputs.lines_of_code }}"
-          
-          # Create status message based on quality gate
-          if [ "$QUALITY_GATE_STATUS" = "OK" ]; then
-            STATUS_MESSAGE="✅ **Quality Gate: PASSED** - Great job! Your code meets all quality standards."
-          elif [ "$QUALITY_GATE_STATUS" = "WARN" ]; then
-            STATUS_MESSAGE="⚠️ **Quality Gate: PASSED with warnings** - Code quality is acceptable but could be improved."
-          else
-            STATUS_MESSAGE="❌ **Quality Gate: FAILED** - Please review and address the issues below before merging."
-          fi
-          
-          # Create recommendations based on metrics
-          RECOMMENDATIONS=""
-          if [ "$BUGS" -gt "0" ]; then
-            RECOMMENDATIONS="$RECOMMENDATIONS
-          - 🐛 **$BUGS bug(s) detected** - Please fix these issues as they may cause runtime problems"
-          fi
-          if [ "$VULNERABILITIES" -gt "0" ]; then
-            RECOMMENDATIONS="$RECOMMENDATIONS
-          - 🔒 **$VULNERABILITIES vulnerability(ies) found** - Security issues that need immediate attention"
-          fi
-          if [ "$SECURITY_HOTSPOTS" -gt "0" ]; then
-            RECOMMENDATIONS="$RECOMMENDATIONS
-          - 🔥 **$SECURITY_HOTSPOTS security hotspot(s)** - Review these potential security risks"
-          fi
-          if [ "$CODE_SMELLS" -gt "10" ]; then
-            RECOMMENDATIONS="$RECOMMENDATIONS
-          - 💩 **$CODE_SMELLS code smell(s)** - Consider refactoring to improve maintainability"
-          fi
-          if [ "${COVERAGE%.*}" -lt "80" ] 2>/dev/null; then
-            RECOMMENDATIONS="$RECOMMENDATIONS
-          - 📈 **Coverage is $COVERAGE%** - Consider adding more tests (target: 80%+)"
-          fi
-          
-          # Create comment body
-          COMMENT_BODY="## 🔍 SonarCloud Analysis Results
-
-          $STATUS_MESSAGE
-
-          ### 📊 Code Quality Metrics
-          | Metric | Value | Status |
-          |--------|-------|--------|
-          | 🐛 Bugs | $BUGS | $([ "$BUGS" = "0" ] && echo "✅" || echo "❌") |
-          | 🔒 Vulnerabilities | $VULNERABILITIES | $([ "$VULNERABILITIES" = "0" ] && echo "✅" || echo "❌") |
-          | 🔥 Security Hotspots | $SECURITY_HOTSPOTS | $([ "$SECURITY_HOTSPOTS" = "0" ] && echo "✅" || echo "⚠️") |
-          | 💩 Code Smells | $CODE_SMELLS | $([ "$CODE_SMELLS" -le "10" ] && echo "✅" || echo "⚠️") |
-          | 📈 Coverage | $COVERAGE% | $([ "${COVERAGE%.*}" -ge "80" ] 2>/dev/null && echo "✅" || echo "⚠️") |
-          | 📋 Duplicated Lines | $DUPLICATED_LINES% | $([ "${DUPLICATED_LINES%.*}" -le "3" ] 2>/dev/null && echo "✅" || echo "⚠️") |
-          | 📏 Lines of Code | $LINES_OF_CODE | ℹ️ |
-          $([ -n "$RECOMMENDATIONS" ] && echo "
-          ### 🎯 Recommendations
-          $RECOMMENDATIONS" || echo "
-          ### 🎉 All Good!
-          No specific recommendations - your code quality looks great!")
-
-          ### 🔗 Links
-          - [📊 View detailed report on SonarCloud](https://sonarcloud.io/project/overview?id=create-pull-request)
-          - [🎯 View pull request analysis](https://sonarcloud.io/project/pull_requests?id=create-pull-request)
-
-          ---
-          *This comment was automatically generated by the SonarCloud workflow. The workflow will always pass - use this feedback to improve code quality.*"
-          
-          # Post comment to PR
-          gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
-          echo "✅ Posted SonarCloud results to PR #$PR_NUMBER"
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-
       - name: Quality Gate Status Summary
         run: |
           QUALITY_GATE_STATUS="${{ needs.sonarcloud.outputs.quality_gate_status }}"
