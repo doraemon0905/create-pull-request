@@ -464,9 +464,16 @@ describe('AIDescriptionGeneratorService', () => {
 
   describe('Gemini API integration', () => {
     it('should call Gemini API with correct parameters', async () => {
+      // Clear all mocks first
+      jest.clearAllMocks();
+      
       // Mock config to only have Gemini
       mockedGetConfig.mockImplementation((section: any) => {
         switch (section) {
+          case 'github':
+            return {};
+          case 'copilot':
+            return {};
           case 'aiProviders':
             return { gemini: { apiKey: 'gemini-key', model: 'gemini-1.5-pro' } };
           default:
@@ -489,8 +496,8 @@ describe('AIDescriptionGeneratorService', () => {
         defaults: { timeout: 30000 }
       };
 
-      mockedAxios.create.mockReturnValueOnce(mockGeminiInstance as any)
-        .mockReturnValue({} as any);
+      // Mock axios.create to return the Gemini instance only
+      mockedAxios.create.mockReturnValue(mockGeminiInstance as any);
 
       service = new AIDescriptionGeneratorService();
       await service.generatePRDescription(mockOptions);
