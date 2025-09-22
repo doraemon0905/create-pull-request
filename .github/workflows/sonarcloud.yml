@@ -144,17 +144,38 @@ jobs:
         run: |
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
           
-          # Get SonarCloud configuration from GitHub context (similar to context.repo)
-          SONAR_PROJECT_KEY="${{ github.event.repository.name }}"
-          SONAR_ORGANIZATION="${{ github.repository_owner }}"
+          # Get SonarCloud configuration from sonar-project.properties file
+          echo "🔧 Reading SonarCloud configuration from sonar-project.properties..."
           
-          echo "🔧 Using GitHub context for SonarCloud configuration:"
-          echo "  Project Key: $SONAR_PROJECT_KEY (from github.event.repository.name)"
-          echo "  Organization: $SONAR_ORGANIZATION (from github.repository_owner)"
+          if [ -f "sonar-project.properties" ]; then
+            SONAR_PROJECT_KEY=$(grep "^sonar.projectKey=" sonar-project.properties | cut -d'=' -f2 | tr -d ' ')
+            SONAR_ORGANIZATION=$(grep "^sonar.organization=" sonar-project.properties | cut -d'=' -f2 | tr -d ' ')
+            
+            echo "✅ Found sonar-project.properties file"
+            echo "  Project Key: $SONAR_PROJECT_KEY (from sonar.projectKey)"
+            echo "  Organization: $SONAR_ORGANIZATION (from sonar.organization)"
+          else
+            echo "⚠️ sonar-project.properties not found, using GitHub context fallback"
+            SONAR_PROJECT_KEY="${{ github.event.repository.name }}"
+            SONAR_ORGANIZATION="${{ github.repository_owner }}"
+            echo "  Project Key: $SONAR_PROJECT_KEY (from github.event.repository.name)"
+            echo "  Organization: $SONAR_ORGANIZATION (from github.repository_owner)"
+          fi
+          
+          # Validate that we have values
+          if [ -z "$SONAR_PROJECT_KEY" ] || [ -z "$SONAR_ORGANIZATION" ]; then
+            echo "❌ Failed to get SonarCloud configuration"
+            exit 1
+          fi
+          
+          echo "📋 Final SonarCloud Configuration:"
+          echo "  Project Key: $SONAR_PROJECT_KEY"
+          echo "  Organization: $SONAR_ORGANIZATION"
           echo "  Repository: ${{ github.repository }}"
           
-          # Base arguments for all scans with dynamic configuration
-          BASE_ARGS="-Dsonar.projectKey=$SONAR_PROJECT_KEY -Dsonar.organization=$SONAR_ORGANIZATION -Dsonar.sources=src -Dsonar.tests=src/__tests__ -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/node_modules/**,**/lib/**,**/scripts/** -Dsonar.exclusions=node_modules/**,lib/**,coverage/**,scripts/**,**/*.d.ts -Dsonar.cpd.exclusions=**/*.test.ts,**/*.spec.ts"
+          # Base arguments - most configuration comes from sonar-project.properties
+          # We only need to override project key and organization if they differ
+          BASE_ARGS="-Dsonar.projectKey=$SONAR_PROJECT_KEY -Dsonar.organization=$SONAR_ORGANIZATION"
           
           if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "" ]; then
             # PR-specific analysis - analyze only the changes in this PR
@@ -285,10 +306,14 @@ jobs:
           
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
           
-          # Get SonarCloud configuration from GitHub context (same as prepare step)
-          SONAR_PROJECT_KEY="${{ github.event.repository.name }}"
-          
-          echo "🔧 Using project key for API calls: $SONAR_PROJECT_KEY (from github.event.repository.name)"
+          # Get SonarCloud configuration from sonar-project.properties (same as prepare step)
+          if [ -f "sonar-project.properties" ]; then
+            SONAR_PROJECT_KEY=$(grep "^sonar.projectKey=" sonar-project.properties | cut -d'=' -f2 | tr -d ' ')
+            echo "🔧 Using project key for API calls: $SONAR_PROJECT_KEY (from sonar-project.properties)"
+          else
+            SONAR_PROJECT_KEY="${{ github.event.repository.name }}"
+            echo "🔧 Using project key for API calls: $SONAR_PROJECT_KEY (GitHub fallback)"
+          fi
           
           # Simple approach - try main project first, then PR if available
           QUALITY_GATE_STATUS="PENDING"
@@ -352,10 +377,14 @@ jobs:
           
           PR_NUMBER="${{ github.event.inputs.pr_number }}"
           
-          # Get SonarCloud configuration from GitHub context (same as prepare step)
-          SONAR_PROJECT_KEY="${{ github.event.repository.name }}"
-          
-          echo "🔧 Using project key for metrics API: $SONAR_PROJECT_KEY (from github.event.repository.name)"
+          # Get SonarCloud configuration from sonar-project.properties (same as prepare step)
+          if [ -f "sonar-project.properties" ]; then
+            SONAR_PROJECT_KEY=$(grep "^sonar.projectKey=" sonar-project.properties | cut -d'=' -f2 | tr -d ' ')
+            echo "🔧 Using project key for metrics API: $SONAR_PROJECT_KEY (from sonar-project.properties)"
+          else
+            SONAR_PROJECT_KEY="${{ github.event.repository.name }}"
+            echo "🔧 Using project key for metrics API: $SONAR_PROJECT_KEY (GitHub fallback)"
+          fi
           
           # Simple approach - try to get metrics, use defaults if not available
           METRICS=""
@@ -554,10 +583,17 @@ jobs:
           ### 🎉 All Good!
           No specific recommendations - your code quality looks great!")
 
+          # Get project key for links
+          if [ -f "sonar-project.properties" ]; then
+            LINK_PROJECT_KEY=$(grep "^sonar.projectKey=" sonar-project.properties | cut -d'=' -f2 | tr -d ' ')
+          else
+            LINK_PROJECT_KEY="${{ github.event.repository.name }}"
+          fi
+          
           ### 🔗 Links
-          - [📊 View detailed report on SonarCloud](https://sonarcloud.io/project/overview?id=create-pull-request)
-          - [🎯 View this PR analysis](https://sonarcloud.io/project/pull_requests?id=create-pull-request&pullRequest=$PR_NUMBER)
-          - [📋 View all pull request analyses](https://sonarcloud.io/project/pull_requests?id=create-pull-request)
+          - [📊 View detailed report on SonarCloud](https://sonarcloud.io/project/overview?id=$LINK_PROJECT_KEY)
+          - [🎯 View this PR analysis](https://sonarcloud.io/project/pull_requests?id=$LINK_PROJECT_KEY&pullRequest=$PR_NUMBER)
+          - [📋 View all pull request analyses](https://sonarcloud.io/project/pull_requests?id=$LINK_PROJECT_KEY)
 
           ---
           *This comment was automatically generated by the SonarCloud workflow. The workflow will always pass - use this feedback to improve code quality.*
@@ -650,10 +686,17 @@ jobs:
             echo "⚠️ Comment creation step was skipped or had an unknown outcome"
           fi
           
+          # Get project key for verification links
+          if [ -f "sonar-project.properties" ]; then
+            VERIFY_PROJECT_KEY=$(grep "^sonar.projectKey=" sonar-project.properties | cut -d'=' -f2 | tr -d ' ')
+          else
+            VERIFY_PROJECT_KEY="${{ github.event.repository.name }}"
+          fi
+          
           echo ""
           echo "🔗 Manual verification:"
           echo "  - Check PR #$PR_NUMBER for SonarCloud comments"
-          echo "  - View SonarCloud analysis: https://sonarcloud.io/project/pull_requests?id=${{ github.event.repository.name }}&pullRequest=$PR_NUMBER"
+          echo "  - View SonarCloud analysis: https://sonarcloud.io/project/pull_requests?id=$VERIFY_PROJECT_KEY&pullRequest=$PR_NUMBER"
 
       - name: Quality Gate Status Summary
         run: |
