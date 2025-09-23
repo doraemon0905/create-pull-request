@@ -5,8 +5,8 @@ import chalk from 'chalk';
 import { config } from 'dotenv';
 import { createPullRequest } from './commands/create-pr';
 import { validateEnvironment } from './utils/validation';
-import { spawn } from 'child_process';
-import path from 'path';
+import { spawn } from 'node:child_process';
+import path from 'node:path';
 import { CONFIG } from './constants';
 
 config();

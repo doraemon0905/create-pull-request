@@ -1,6 +1,6 @@
 // Load package.json to get dynamic version
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 // Function to get version from package.json
 function getPackageVersion(): string {
@@ -25,7 +25,7 @@ export const API_URLS = {
 
 // Default Models
 export const DEFAULT_MODELS = {
-  CLAUDE: 'claude-3-5-sonnet-20241022',
+  CLAUDE: 'claude-sonnet-4-20250514',
   OPENAI: 'gpt-4o',
   GEMINI: 'gemini-1.5-pro',
   COPILOT: 'gpt-4o'
@@ -33,7 +33,7 @@ export const DEFAULT_MODELS = {
 
 // Limits and Timeouts
 export const LIMITS = {
-  API_TIMEOUT_MS: 30000,
+  API_TIMEOUT_MS: 3000000,
   MAX_API_TOKENS: 4000,
   MAX_PR_TITLE_LENGTH: 256,
   DEFAULT_MAX_DIFF_LINES: 1000,

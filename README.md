@@ -6,7 +6,7 @@ A CLI tool that automatically generates pull request descriptions based on Jira 
 
 - 🎫 **Jira Integration**: Automatically fetches ticket information from Jira
 - 🔄 **Git Analysis**: Analyzes file changes and commit history
-- 🤖 **AI-Powered**: Uses multiple AI providers (Claude → ChatGPT → Gemini → Copilot) to generate intelligent PR descriptions
+- 🤖 **AI-Powered**: Uses your selected AI provider (Claude, ChatGPT, Gemini, or Copilot) to generate intelligent PR descriptions
 - 📋 **Template Support**: Automatically detects and uses PR templates from your repository
 - ✅ **User Review**: Always asks for user confirmation before creating the PR
 - 🏃‍♂️ **Dry Run Mode**: Preview generated content without creating a PR
@@ -141,44 +141,41 @@ create-pr create --jira PROJ-123 --dry-run
 2. **Jira Integration**: Fetches ticket details including summary, description, and metadata
 3. **Git Analysis**: Analyzes file changes, commit messages, and diff content
 4. **Template Detection**: Looks for PR templates in your repository
-5. **AI Provider Selection**: Automatically selects the best available AI provider (Claude → ChatGPT → Gemini → Copilot)
-6. **AI Generation**: Uses the selected AI provider to generate intelligent descriptions with automatic fallback
+5. **AI Provider Selection**: Uses the configured AI provider or prompts you to select one if multiple are available
+6. **AI Generation**: Uses the selected AI provider to generate intelligent descriptions
 7. **User Review**: Shows generated content and asks for confirmation
 8. **PR Creation**: Creates the pull request on GitHub
 
-## AI Provider Priority
+## AI Provider Options
 
-The tool uses AI providers in the following priority order:
+The tool supports the following AI providers:
 
-1. **Claude (Anthropic)** - Primary provider
+1. **Claude (Anthropic)** - Recommended
    - Most reliable and consistent results
    - Excellent code understanding and analysis
    - Superior reasoning capabilities for complex changes
    - Fast response times
 
-2. **ChatGPT (OpenAI)** - Secondary provider
-   - Reliable alternative when Claude is unavailable
+2. **ChatGPT (OpenAI)** - Alternative
+   - Reliable option with good code understanding
    - Good understanding of code context
    - Consistent performance
 
-3. **Gemini (Google)** - Fallback provider
-   - Good alternative when primary providers are unavailable
+3. **Gemini (Google)** - Alternative
    - Strong analytical capabilities
    - Handles complex code changes well
+   - Good alternative option
 
-4. **GitHub Copilot** - Legacy provider
+4. **GitHub Copilot** - Legacy option
    - May have stability issues
    - Uses GitHub infrastructure
-   - Fallback option for existing setups
+   - Available for existing setups
 
-If multiple providers are configured, the tool will automatically:
-- Try Claude first
-- Fall back to ChatGPT if Claude fails
-- Fall back to Gemini if both Claude and ChatGPT fail
-- Fall back to Copilot if all other providers fail
-- Use template-based generation if all AI providers fail
-
-You can configure multiple providers for maximum reliability.
+**Provider Selection**:
+- If only one provider is configured, it will be used automatically
+- If multiple providers are available, the tool will use the priority order: Claude → ChatGPT → Gemini → Copilot
+- You can configure multiple providers, but the tool will **not automatically fall back** if your selected provider fails
+- If your selected provider fails, you'll get a clear error message and need to ensure it's properly configured
 
 ## Supported PR Template Locations
 
@@ -230,14 +227,14 @@ Title: PROJ-123: Implement user authentication
 
 ## Requirements
 
-- Node.js 18.0.0 or higher
+- Node.js 18.0.0 or higher (ES2021 support)
 - Git repository
 - Jira account with API access
 - GitHub account with repository access
 - At least one AI provider:
   - **Anthropic Claude API key** (recommended) - Most reliable and intelligent
-  - **OpenAI API key** (secondary) - Reliable alternative
-  - **Google Gemini API key** (fallback) - Good alternative option
+  - **OpenAI API key** (alternative) - Reliable option
+  - **Google Gemini API key** (alternative) - Good option
   - **GitHub Copilot API token** (legacy) - May have availability issues
 
 ## Development
@@ -263,6 +260,13 @@ npm test
 npm run lint
 ```
 
+### Technical Specifications
+
+- **TypeScript Target**: ES2021 for modern JavaScript features
+- **Node.js Modules**: Uses `node:` prefix for built-in modules (`node:fs`, `node:path`, etc.)
+- **Code Style**: Modern JavaScript practices including `for...of` loops and `String#replaceAll()`
+- **AI Provider Architecture**: Direct provider selection without automatic fallbacks for predictable behavior
+
 ## Contributing
 
 1. Fork the repository
@@ -283,9 +287,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 2. **Template Not Found**: PR templates are optional. The tool will use a default format if none are found
 3. **No Changes Detected**: Make sure you're on a feature branch with changes compared to the base branch
 4. **AI Provider Issues**: 
-   - If Claude fails, the tool automatically falls back to ChatGPT, then Gemini, then Copilot
-   - If all AI providers fail, the tool uses template-based generation
-   - Run `create-pr setup` to configure additional AI providers
+   - The tool will **not automatically fall back** to other providers if your selected provider fails
+   - Ensure your selected AI provider has a valid API key and proper configuration
+   - If you need reliability, ensure your primary provider is properly set up
+   - Run `create-pr setup` to configure or change AI providers
 5. **No AI Providers Configured**: At least one AI provider must be configured. Run `create-pr setup` to configure providers
 
 ### Getting Help
