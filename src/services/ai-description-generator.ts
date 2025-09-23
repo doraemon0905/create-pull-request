@@ -204,7 +204,7 @@ export class AIDescriptionGeneratorService {
 
     // File-by-file analysis with line numbers and GitHub links
     summaryPrompt += `### Specific File Changes:\n`;
-    gitChanges.files.forEach(file => {
+    for (const file of gitChanges.files) {
       summaryPrompt += `\n**${file.file}** (${file.status}):\n`;
       summaryPrompt += `- Changes: +${file.insertions} insertions, -${file.deletions} deletions\n`;
 
@@ -247,7 +247,7 @@ export class AIDescriptionGeneratorService {
       } else {
         summaryPrompt += `- No detailed diff available for this file\n`;
       }
-    });
+    }
 
     if (diffContent) {
       summaryPrompt += `\n## Overall Code Changes:\n`;
@@ -374,7 +374,7 @@ export class AIDescriptionGeneratorService {
       content = cleanedContent;
     }
 
-    const finalSummary = content.trim().replace(/["']/g, ''); // Remove quotes
+    const finalSummary = content.trim().replaceAll(/["']/g, ''); // Remove quotes
 
     return finalSummary;
   }
@@ -405,7 +405,7 @@ export class AIDescriptionGeneratorService {
     // Detailed file-by-file analysis with enhanced requirements
     prompt += `### DETAILED File-by-File Changes Analysis:\n`;
     prompt += `For EACH file below, you MUST explain in detail HOW the specific changes fulfill the JIRA ticket requirements:\n\n`;
-    gitChanges.files.forEach(file => {
+    for (const file of gitChanges.files) {
       prompt += `\n**${file.file}** (${file.status}):\n`;
       prompt += `- Insertions: +${file.insertions}, Deletions: -${file.deletions}\n`;
 
@@ -425,15 +425,15 @@ export class AIDescriptionGeneratorService {
         prompt += `- COMPLETE code changes for analysis:\n\`\`\`diff\n${truncatedDiff}\n\`\`\`\n`;
         prompt += `- MANDATORY: Analyze this diff and explain HOW each change addresses the JIRA ticket requirements\n`;
       }
-    });
+    }
     prompt += `\n`;
 
     // Commit messages
     if (gitChanges.commits.length > 0) {
       prompt += `## Commit Messages:\n`;
-      gitChanges.commits.forEach(commit => {
+      for (const commit of gitChanges.commits) {
         prompt += `- ${commit}\n`;
-      });
+      }
       prompt += `\n`;
     }
 
@@ -728,8 +728,8 @@ export class AIDescriptionGeneratorService {
 
     // Remove markdown code blocks (```json ... ``` or ``` ... ```)
     let cleaned = content
-      .replace(/^```(?:json)?\s*\n?/gmi, '') // Remove opening ```json or ```
-      .replace(/\n?```\s*$/gm, '') // Remove closing ```
+      .replaceAll(/^```(?:json)?\s*\n?/gmi, '') // Remove opening ```json or ```
+      .replaceAll(/\n?```\s*$/gm, '') // Remove closing ```
       .trim();
 
     // Also handle case where there might be text before/after the JSON
