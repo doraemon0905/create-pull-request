@@ -29,6 +29,19 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Function to check if changes include TypeScript code
+has_typescript_changes() {
+    local changed_files
+    changed_files=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
+
+    # Check for TypeScript files (.ts, .tsx)
+    if echo "$changed_files" | grep -q "\\.tsx\?$\|\\.ts$"; then
+        return 0  # Has TypeScript changes
+    fi
+
+    return 1  # No TypeScript changes
+}
+
 # Function to determine version bump type
 determine_version_type() {
     local pr_number="$1"
@@ -157,7 +170,15 @@ main() {
     recent_commits=$(git log -5 --pretty=format:"%s" 2>/dev/null || echo "")
     
     print_status "Last commit: $last_commit_message"
-    
+
+    # Check if changes include TypeScript code
+    if ! has_typescript_changes; then
+        print_status "No TypeScript code changes detected. Version update skipped."
+        exit 0
+    fi
+
+    print_status "TypeScript code changes detected. Proceeding with version update."
+
     # Try to extract PR number from commit message
     local pr_number
     pr_number=$(echo "$last_commit_message" | grep -o '#[0-9]\+' | head -1 | sed 's/#//' || echo "")
@@ -299,6 +320,7 @@ show_help() {
     echo ""
     echo "Skip version update:"
     echo "  Include [skip version], [no version], or [skip bump] in commit message"
+    echo "  No TypeScript code changes (.ts, .tsx files) in the commit"
 }
 
 # Parse command line arguments
@@ -334,10 +356,18 @@ done
 # Dry run mode
 if [ "$DRY_RUN" = true ]; then
     print_status "DRY RUN MODE - No changes will be made"
-    
+
     # Get current version
     current_version=$(node -p "require('./package.json').version" 2>/dev/null || echo "")
     print_status "Current version: $current_version"
+
+    # Check if changes include TypeScript code
+    if ! has_typescript_changes; then
+        print_status "No TypeScript code changes detected. Version update would be skipped."
+        exit 0
+    fi
+
+    print_status "TypeScript code changes detected. Proceeding with dry run."
     
     # Get commit info
     last_commit_message=$(git log -1 --pretty=format:"%s" 2>/dev/null || echo "")

@@ -117,7 +117,7 @@ export async function createPullRequest(options: CreatePROptions): Promise<void>
 
     // Get PR templates
     spinner.start('Looking for pull request templates...');
-    const templates = await githubService.getPullRequestTemplates(repo);
+    const templates = await githubService.getPullRequestTemplates();
     let selectedTemplate = templates.length > 0 ? templates[0] : undefined;
 
     if (templates.length > 1) {
