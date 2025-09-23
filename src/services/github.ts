@@ -2,6 +2,8 @@ import { Octokit } from '@octokit/rest';
 import { simpleGit, SimpleGit } from 'simple-git';
 import { getConfig } from '../utils/config';
 import { FILE_PATHS, REGEX_PATTERNS, HEADERS, HTTP_STATUS, LIMITS, CONFIG } from '../constants';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 export interface GitHubRepo {
   owner: string;
@@ -61,62 +63,77 @@ export class GitHubService {
     };
   }
 
-  async getPullRequestTemplates(repo: GitHubRepo): Promise<PullRequestTemplate[]> {
+  async getPullRequestTemplates(): Promise<PullRequestTemplate[]> {
+    const templates: PullRequestTemplate[] = [];
+
+    // Get templates from predefined paths
+    const predefinedTemplates = this.loadPredefinedTemplates();
+    templates.push(...predefinedTemplates);
+
+    // Get templates from directory
+    const directoryTemplates = this.loadDirectoryTemplates();
+    templates.push(...directoryTemplates);
+
+    return templates;
+  }
+
+  private loadPredefinedTemplates(): PullRequestTemplate[] {
     const templates: PullRequestTemplate[] = [];
     const possiblePaths = FILE_PATHS.PR_TEMPLATE_PATHS;
 
-    for (const path of possiblePaths) {
-      try {
-        const response = await this.octokit.rest.repos.getContent({
-          owner: repo.owner,
-          repo: repo.repo,
-          path: path
-        });
-
-        if ('content' in response.data && response.data.type === 'file') {
-          const content = Buffer.from(response.data.content, 'base64').toString('utf-8');
-          templates.push({
-            name: path.includes('/') ? path.split('/').pop()! : path,
-            content
-          });
-        }
-      } catch {
-        // Template doesn't exist at this path, continue
+    for (const templatePath of possiblePaths) {
+      const template = this.tryLoadTemplate(templatePath);
+      if (template) {
+        templates.push(template);
       }
-    }
-
-    // Check for multiple templates in .github/PULL_REQUEST_TEMPLATE directory
-    try {
-      const response = await this.octokit.rest.repos.getContent({
-        owner: repo.owner,
-        repo: repo.repo,
-        path: '.github/PULL_REQUEST_TEMPLATE'
-      });
-
-      if (Array.isArray(response.data)) {
-        for (const file of response.data) {
-          if (file.type === 'file' && file.name.endsWith('.md')) {
-            const fileResponse = await this.octokit.rest.repos.getContent({
-              owner: repo.owner,
-              repo: repo.repo,
-              path: file.path
-            });
-
-            if ('content' in fileResponse.data && fileResponse.data.type === 'file') {
-              const content = Buffer.from(fileResponse.data.content, 'base64').toString('utf-8');
-              templates.push({
-                name: file.name,
-                content
-              });
-            }
-          }
-        }
-      }
-    } catch {
-      // Directory doesn't exist, continue
     }
 
     return templates;
+  }
+
+  private loadDirectoryTemplates(): PullRequestTemplate[] {
+    const templates: PullRequestTemplate[] = [];
+    const templateDir = '.github/PULL_REQUEST_TEMPLATE';
+
+    try {
+      if (!fs.existsSync(templateDir)) {
+        return templates;
+      }
+
+      const files = fs.readdirSync(templateDir);
+      const markdownFiles = files.filter(file => file.endsWith('.md'));
+
+      for (const file of markdownFiles) {
+        const filePath = path.join(templateDir, file);
+        const template = this.tryLoadTemplate(filePath, file);
+        if (template) {
+          templates.push(template);
+        }
+      }
+    } catch {
+      // Directory doesn't exist or can't be read, continue
+    }
+
+    return templates;
+  }
+
+  private tryLoadTemplate(templatePath: string, customName?: string): PullRequestTemplate | null {
+    try {
+      if (!fs.existsSync(templatePath)) {
+        return null;
+      }
+
+      const content = fs.readFileSync(templatePath, 'utf-8');
+      const name = customName || this.extractTemplateNameFromPath(templatePath);
+
+      return { name, content };
+    } catch {
+      return null;
+    }
+  }
+
+  private extractTemplateNameFromPath(templatePath: string): string {
+    return templatePath.includes('/') ? templatePath.split('/').pop()! : templatePath;
   }
 
   async findExistingPullRequest(repo: GitHubRepo, branch: string): Promise<any | null> {

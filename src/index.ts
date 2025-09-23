@@ -5,8 +5,8 @@ import chalk from 'chalk';
 import { config } from 'dotenv';
 import { createPullRequest } from './commands/create-pr';
 import { validateEnvironment } from './utils/validation';
-import { spawn } from 'child_process';
-import path from 'path';
+import { spawn } from 'node:child_process';
+import path from 'node:path';
 import { CONFIG } from './constants';
 
 config();
@@ -55,10 +55,11 @@ program
     console.log(chalk.yellow('   JIRA_USERNAME') + '=your-email@company.com');
     console.log(chalk.yellow('   JIRA_API_TOKEN') + '=your-jira-api-token');
     console.log(chalk.yellow('   GITHUB_TOKEN') + '=your-github-personal-access-token');
-    console.log('\n🤖 ' + chalk.bold('AI Providers (Primary: ChatGPT → Fallback: Gemini → Copilot):'));
-    console.log(chalk.yellow('   OPENAI_API_KEY') + '=your-openai-api-key ' + chalk.gray('(recommended)'));
+    console.log('\n🤖 ' + chalk.bold('AI Providers (Primary: Claude Code → ChatGPT → Fallback: Gemini → Copilot):'));
+    console.log(chalk.yellow('   OPENAI_API_KEY') + '=your-openai-api-key ' + chalk.gray('(fallback)'));
     console.log(chalk.yellow('   GEMINI_API_KEY') + '=your-gemini-api-key ' + chalk.gray('(fallback)'));
-    console.log(chalk.yellow('   COPILOT_API_TOKEN') + '=your-copilot-api-token ' + chalk.gray('(legacy)\n'));
+    console.log(chalk.yellow('   ANTHROPIC_API_KEY') + '=your-anthropic-api-key ' + chalk.gray('(recommended)'));
+    console.log(chalk.yellow('   COPILOT_API_TOKEN') + '=your-copilot-api-token ' + chalk.gray('(fallback)\n'));
     
     console.log('📝 ' + chalk.bold('Important notes:'));
     console.log('• Make sure your GitHub token has repo permissions');
