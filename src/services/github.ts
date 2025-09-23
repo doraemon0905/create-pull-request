@@ -2,6 +2,8 @@ import { Octokit } from '@octokit/rest';
 import { simpleGit, SimpleGit } from 'simple-git';
 import { getConfig } from '../utils/config';
 import { FILE_PATHS, REGEX_PATTERNS, HEADERS, HTTP_STATUS, LIMITS, CONFIG } from '../constants';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 export interface GitHubRepo {
   owner: string;
@@ -61,22 +63,17 @@ export class GitHubService {
     };
   }
 
-  async getPullRequestTemplates(repo: GitHubRepo): Promise<PullRequestTemplate[]> {
+  async getPullRequestTemplates(): Promise<PullRequestTemplate[]> {
     const templates: PullRequestTemplate[] = [];
     const possiblePaths = FILE_PATHS.PR_TEMPLATE_PATHS;
 
-    for (const path of possiblePaths) {
+    // Check for templates in predefined paths
+    for (const templatePath of possiblePaths) {
       try {
-        const response = await this.octokit.rest.repos.getContent({
-          owner: repo.owner,
-          repo: repo.repo,
-          path: path
-        });
-
-        if ('content' in response.data && response.data.type === 'file') {
-          const content = Buffer.from(response.data.content, 'base64').toString('utf-8');
+        if (fs.existsSync(templatePath)) {
+          const content = fs.readFileSync(templatePath, 'utf-8');
           templates.push({
-            name: path.includes('/') ? path.split('/').pop()! : path,
+            name: templatePath.includes('/') ? templatePath.split('/').pop()! : templatePath,
             content
           });
         }
@@ -86,28 +83,21 @@ export class GitHubService {
     }
 
     // Check for multiple templates in .github/PULL_REQUEST_TEMPLATE directory
+    const templateDir = '.github/PULL_REQUEST_TEMPLATE';
     try {
-      const response = await this.octokit.rest.repos.getContent({
-        owner: repo.owner,
-        repo: repo.repo,
-        path: '.github/PULL_REQUEST_TEMPLATE'
-      });
-
-      if (Array.isArray(response.data)) {
-        for (const file of response.data) {
-          if (file.type === 'file' && file.name.endsWith('.md')) {
-            const fileResponse = await this.octokit.rest.repos.getContent({
-              owner: repo.owner,
-              repo: repo.repo,
-              path: file.path
-            });
-
-            if ('content' in fileResponse.data && fileResponse.data.type === 'file') {
-              const content = Buffer.from(fileResponse.data.content, 'base64').toString('utf-8');
+      if (fs.existsSync(templateDir)) {
+        const files = fs.readdirSync(templateDir);
+        for (const file of files) {
+          if (file.endsWith('.md')) {
+            const filePath = path.join(templateDir, file);
+            try {
+              const content = fs.readFileSync(filePath, 'utf-8');
               templates.push({
-                name: file.name,
+                name: file,
                 content
               });
+            } catch {
+              // Skip files that can't be read
             }
           }
         }

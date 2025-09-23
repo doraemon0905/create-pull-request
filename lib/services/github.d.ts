@@ -18,7 +18,7 @@ export declare class GitHubService {
     private git;
     constructor();
     getCurrentRepo(): Promise<GitHubRepo>;
-    getPullRequestTemplates(repo: GitHubRepo): Promise<PullRequestTemplate[]>;
+    getPullRequestTemplates(): Promise<PullRequestTemplate[]>;
     findExistingPullRequest(repo: GitHubRepo, branch: string): Promise<any | null>;
     updatePullRequest(repo: GitHubRepo, pullNumber: number, pullRequest: Partial<PullRequest>): Promise<any>;
     createOrUpdatePullRequest(repo: GitHubRepo, pullRequest: PullRequest): Promise<{

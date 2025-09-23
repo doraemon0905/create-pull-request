@@ -6,9 +6,18 @@ import { getConfig } from '../utils/config';
 jest.mock('@octokit/rest');
 jest.mock('../utils/config');
 jest.mock('simple-git');
+jest.mock('node:fs');
+jest.mock('node:path');
 
 const MockedOctokit = Octokit as jest.MockedClass<typeof Octokit>;
 const mockedGetConfig = getConfig as jest.MockedFunction<typeof getConfig>;
+
+// Import mocked fs and path
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+const mockedFs = fs as jest.Mocked<typeof fs>;
+const mockedPath = path as jest.Mocked<typeof path>;
 
 describe('GitHubService', () => {
   let githubService: GitHubService;
@@ -41,6 +50,9 @@ describe('GitHubService', () => {
 
     MockedOctokit.mockImplementation(() => mockOctokit);
     mockedGetConfig.mockReturnValue(mockConfig);
+
+    // Reset file system mocks
+    jest.clearAllMocks();
 
     githubService = new GitHubService();
   });
@@ -258,44 +270,84 @@ describe('GitHubService', () => {
   });
 
   describe('getPullRequestTemplates', () => {
-    const mockRepo = {
-      owner: 'testowner',
-      repo: 'testrepo'
-    };
+    it('should get pull request templates successfully from local file system', async () => {
+      const mockContent = '## Description\n{{description}}';
 
-    it('should get pull request templates successfully', async () => {
-      const mockContent = Buffer.from('## Description\n{{description}}').toString('base64');
-
-      mockOctokit.rest.repos.getContent.mockResolvedValueOnce({
-        data: {
-          type: 'file',
-          content: mockContent
-        }
+      // Mock file system to return template exists and content
+      jest.mocked(mockedFs.existsSync).mockImplementation((path: any) => {
+        return path === '.github/pull_request_template.md';
       });
 
-      const result = await githubService.getPullRequestTemplates(mockRepo);
+      jest.mocked(mockedFs.readFileSync).mockImplementation((path: any) => {
+        if (path === '.github/pull_request_template.md') {
+          return mockContent;
+        }
+        throw new Error('File not found');
+      });
+
+      const result = await githubService.getPullRequestTemplates();
 
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual({
         name: 'pull_request_template.md',
-        content: '## Description\n{{description}}'
+        content: mockContent
       });
     });
 
     it('should return empty array when no templates found', async () => {
-      mockOctokit.rest.repos.getContent.mockRejectedValue({ status: 404 });
+      // Mock file system to return no templates exist
+      jest.mocked(mockedFs.existsSync).mockReturnValue(false);
 
-      const result = await githubService.getPullRequestTemplates(mockRepo);
+      const result = await githubService.getPullRequestTemplates();
 
       expect(result).toEqual([]);
     });
 
-    it('should handle API errors gracefully', async () => {
-      mockOctokit.rest.repos.getContent.mockRejectedValue(new Error('API Error'));
+    it('should handle file system errors gracefully', async () => {
+      // Mock file system to exist but throw error on read
+      jest.mocked(mockedFs.existsSync).mockReturnValue(true);
+      jest.mocked(mockedFs.readFileSync).mockImplementation(() => {
+        throw new Error('File read error');
+      });
 
-      const result = await githubService.getPullRequestTemplates(mockRepo);
+      const result = await githubService.getPullRequestTemplates();
 
       expect(result).toEqual([]);
+    });
+
+    it('should handle multiple templates in directory', async () => {
+      const templateDir = '.github/PULL_REQUEST_TEMPLATE';
+
+      // Mock first check for individual templates (none exist)
+      jest.mocked(mockedFs.existsSync).mockImplementation((path: any) => {
+        if (path === templateDir) return true;
+        return false;
+      });
+
+      // Mock directory reading
+      jest.mocked(mockedFs.readdirSync).mockReturnValue(['template1.md', 'template2.md', 'notmd.txt'] as any);
+
+      // Mock path.join
+      jest.mocked(mockedPath.join).mockImplementation((dir: string, file: string) => `${dir}/${file}`);
+
+      // Mock reading individual template files
+      jest.mocked(mockedFs.readFileSync).mockImplementation((path: any) => {
+        if (path === `${templateDir}/template1.md`) return 'Template 1 content';
+        if (path === `${templateDir}/template2.md`) return 'Template 2 content';
+        throw new Error('File not found');
+      });
+
+      const result = await githubService.getPullRequestTemplates();
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual({
+        name: 'template1.md',
+        content: 'Template 1 content'
+      });
+      expect(result[1]).toEqual({
+        name: 'template2.md',
+        content: 'Template 2 content'
+      });
     });
   });
 });
