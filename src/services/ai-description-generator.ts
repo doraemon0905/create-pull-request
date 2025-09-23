@@ -114,27 +114,23 @@ export class AIDescriptionGeneratorService {
   }
 
   async generatePRDescription(options: GenerateDescriptionOptions): Promise<GeneratedPRContent> {
-    try {
-      // Select AI provider if not already selected
-      if (!this.selectedProvider) {
-        this.selectedProvider = await this.selectAIProvider();
-      }
-
-      // First, generate a summary using selected AI provider
-      const summary = await this.generateSummary(options);
-
-      // Then generate the full PR description using the summary
-      const prompt = this.buildPrompt(options, summary);
-      const response = await this.callAIAPI(prompt, this.selectedProvider);
-      const result = this.parseAIResponse(response, this.selectedProvider);
-
-      return {
-        ...result,
-        summary
-      };
-    } catch (_error) {
-      return this.tryFallbackProviders(options);
+    // Select AI provider if not already selected
+    if (!this.selectedProvider) {
+      this.selectedProvider = await this.selectAIProvider();
     }
+
+    // First, generate a summary using selected AI provider
+    const summary = await this.generateSummary(options);
+
+    // Then generate the full PR description using the summary
+    const prompt = this.buildPrompt(options, summary);
+    const response = await this.callAIAPI(prompt, this.selectedProvider);
+    const result = this.parseAIResponse(response, this.selectedProvider);
+
+    return {
+      ...result,
+      summary
+    };
   }
 
   private async selectAIProvider(): Promise<AIProvider> {
@@ -176,29 +172,6 @@ export class AIDescriptionGeneratorService {
     return selectedProvider;
   }
 
-  private async tryFallbackProviders(options: GenerateDescriptionOptions): Promise<GeneratedPRContent> {
-    const providers: AIProvider[] = ['claude', 'chatgpt', 'gemini', 'copilot'];
-    const availableProviders = providers.filter(p => this.clients.has(p));
-
-    // Remove the already tried provider
-    const remainingProviders = availableProviders.filter(p => p !== this.selectedProvider);
-
-    for (const provider of remainingProviders) {
-      try {
-        const summary = await this.generateSummary(options, provider);
-        const prompt = this.buildPrompt(options, summary);
-        const response = await this.callAIAPI(prompt, provider);
-        const result = this.parseAIResponse(response, provider);
-
-        this.selectedProvider = provider;
-        return { ...result, summary };
-      } catch (_error) {
-        continue;
-      }
-    }
-
-    return this.generateFallbackDescription(options);
-  }
 
   private async generateSummary(options: GenerateDescriptionOptions, provider?: AIProvider): Promise<string> {
     const targetProvider = provider || this.selectedProvider || 'claude';
@@ -373,30 +346,30 @@ export class AIDescriptionGeneratorService {
       summaryPrompt += `- Preserve all headers, formatting, and structural elements from the template\n`;
     }
 
-      const response = await this.callAIAPI(summaryPrompt, targetProvider);
-      let content = this.extractContentFromResponse(response, targetProvider);
+    const response = await this.callAIAPI(summaryPrompt, targetProvider);
+    let content = this.extractContentFromResponse(response, targetProvider);
 
-      // Clean the content to remove markdown code blocks
-      const cleanedContent = this.cleanJSONResponse(content);
+    // Clean the content to remove markdown code blocks
+    const cleanedContent = this.cleanJSONResponse(content);
 
-      // Try to parse as JSON first, if it's valid JSON extract the content
-      try {
-        const parsed = JSON.parse(cleanedContent);
+    // Try to parse as JSON first, if it's valid JSON extract the content
+    try {
+      const parsed = JSON.parse(cleanedContent);
 
-        if (parsed.summary) {
-          content = parsed.summary;
-        } else if (typeof parsed === 'string') {
-          content = parsed;
-        } else {
-          content = cleanedContent;
-        }
-      } catch {
+      if (parsed.summary) {
+        content = parsed.summary;
+      } else if (typeof parsed === 'string') {
+        content = parsed;
+      } else {
         content = cleanedContent;
       }
+    } catch {
+      content = cleanedContent;
+    }
 
-      const finalSummary = content.trim().replace(/["']/g, ''); // Remove quotes
+    const finalSummary = content.trim().replace(/["']/g, ''); // Remove quotes
 
-      return finalSummary;
+    return finalSummary;
   }
 
   private buildPrompt(options: GenerateDescriptionOptions, summary?: string): string {
@@ -587,21 +560,17 @@ export class AIDescriptionGeneratorService {
       throw new Error(`${provider.toUpperCase()} client not configured`);
     }
 
-    try {
-      switch (provider) {
-        case 'claude':
-          return await this.callClaudeAPI(client, prompt);
-        case 'chatgpt':
-          return await this.callChatGPTAPI(client, prompt);
-        case 'gemini':
-          return await this.callGeminiAPI(client, prompt);
-        case 'copilot':
-          return await this.callCopilotAPI(client, prompt);
-        default:
-          throw new Error(`Unsupported AI provider: ${provider}`);
-      }
-    } catch (_error) {
-      throw new Error(`${provider.toUpperCase()} API not available`);
+    switch (provider) {
+      case 'claude':
+        return await this.callClaudeAPI(client, prompt);
+      case 'chatgpt':
+        return await this.callChatGPTAPI(client, prompt);
+      case 'gemini':
+        return await this.callGeminiAPI(client, prompt);
+      case 'copilot':
+        return await this.callCopilotAPI(client, prompt);
+      default:
+        throw new Error(`Unsupported AI provider: ${provider}`);
     }
   }
 
@@ -817,108 +786,6 @@ export class AIDescriptionGeneratorService {
     return titleMatch ? titleMatch[1].trim() : null;
   }
 
-  private generateFallbackDescription(options: GenerateDescriptionOptions): GeneratedPRContent {
-    const { jiraTicket, gitChanges, template, prTitle } = options;
-    const hasTemplate = template && template.content;
-    const jiraConfig = getConfig('jira');
-
-    // Generate a summary for fallback
-    const summary = this.generateFallbackSummary(jiraTicket, gitChanges);
-
-    // Generate shorter title based on summary
-    const title = prTitle || this.generateShortTitle(jiraTicket);
-
-    // Generate body based on template or default structure
-    let body = '';
-
-    // Always start with ticket URLs at the top
-    body += `[${jiraTicket.key}](${jiraConfig.baseUrl}/browse/${jiraTicket.key})\n\n`;
-
-    // Add summary
-    body += `## Summary\n\n${summary}\n\n`;
-
-    if (hasTemplate) {
-      // Try to fill in template placeholders
-      body += template!.content
-        .replace(/\{\{ticket\}\}/gi, jiraTicket.key)
-        .replace(/\{\{summary\}\}/gi, summary)
-        .replace(/\{\{description\}\}/gi, jiraTicket.description || 'No description provided');
-    } else {
-      // Enhanced default template with detailed analysis
-      body += `**Ticket Summary:** ${jiraTicket.summary}\n\n`;
-
-      if (jiraTicket.description) {
-        body += `**JIRA Description:** ${jiraTicket.description}\n\n`;
-        body += `### How this PR addresses the JIRA requirements:\n`;
-        body += `The code changes in this PR directly implement the functionality described in the JIRA ticket above.\n\n`;
-      }
-
-      body += `## Detailed Changes Analysis\n\n`;
-      body += `- **Files changed:** ${gitChanges.totalFiles}\n`;
-      body += `- **Insertions:** +${gitChanges.totalInsertions}\n`;
-      body += `- **Deletions:** -${gitChanges.totalDeletions}\n\n`;
-
-      body += `### File-by-File Changes:\n\n`;
-      gitChanges.files.forEach(file => {
-        body += `#### \`${file.file}\` (${file.status})\n`;
-        body += `- **Changes:** +${file.insertions} insertions, -${file.deletions} deletions\n`;
-
-        if (file.lineNumbers) {
-          if (file.lineNumbers.added.length > 0) {
-            const addedLines = file.lineNumbers.added.slice(0, 10);
-            body += `- **Added lines:** ${addedLines.join(', ')}${file.lineNumbers.added.length > 10 ? ` (and ${file.lineNumbers.added.length - 10} more)` : ''}\n`;
-          }
-          if (file.lineNumbers.removed.length > 0) {
-            const removedLines = file.lineNumbers.removed.slice(0, 10);
-            body += `- **Removed lines:** ${removedLines.join(', ')}${file.lineNumbers.removed.length > 10 ? ` (and ${file.lineNumbers.removed.length - 10} more)` : ''}\n`;
-          }
-        }
-
-        body += `- **Relevance:** Key implementation file for ${this.getFileRelevanceDescription(file, jiraTicket)}\n\n`;
-      });
-
-      if (gitChanges.commits.length > 0) {
-        body += `## Commit History\n\n`;
-        gitChanges.commits.forEach(commit => {
-          body += `- ${commit}\n`;
-        });
-        body += `\n`;
-      }
-
-      body += `## Key Implementation Areas\n\n`;
-      body += `Reviewers should focus on the following areas:\n\n`;
-
-      const significantFiles = gitChanges.files.filter(f => f.insertions + f.deletions > 10);
-      if (significantFiles.length > 0) {
-        significantFiles.forEach(file => {
-          body += `- **${file.file}**: Contains ${file.insertions + file.deletions} total changes`;
-          if (file.lineNumbers?.added.length) {
-            body += `, particularly around lines ${file.lineNumbers.added.slice(0, 3).join(', ')}`;
-          }
-          body += `\n`;
-        });
-      } else {
-        gitChanges.files.forEach(file => {
-          body += `- **${file.file}**: ${file.status} file with ${file.insertions + file.deletions} changes\n`;
-        });
-      }
-
-      // Only add testing section if no template or template doesn't have testing
-      const hasTestingInTemplate = hasTemplate && template.content.toLowerCase().includes('testing');
-      if (!hasTestingInTemplate) {
-        body += `\n## Testing\n\n`;
-        body += `- Manual testing completed\n`;
-        body += `- Unit tests added/updated\n`;
-        body += `- Integration tests passing\n`;
-        if (jiraTicket.description) {
-          body += `- Verified implementation meets JIRA requirements\n`;
-        }
-        body += `\n`;
-      }
-    }
-
-    return { title, body, summary };
-  }
 
   private getFileRelevanceDescription(file: FileChange, jiraTicket: JiraTicket): string {
     const fileName = file.file.toLowerCase();
@@ -941,117 +808,7 @@ export class AIDescriptionGeneratorService {
     }
   }
 
-  private generateFallbackSummary(jiraTicket: JiraTicket, gitChanges: GitChanges): string {
-    const action = this.getActionFromIssueType(jiraTicket.issueType);
-    const mainFiles = gitChanges.files.filter(f => f.insertions + f.deletions > 5);
-    const fileContext = mainFiles.length > 0
-      ? ` across ${mainFiles.length} key file${mainFiles.length > 1 ? 's' : ''}`
-      : ` with ${gitChanges.totalFiles} file change${gitChanges.totalFiles > 1 ? 's' : ''}`;
 
-    return `${action} ${jiraTicket.summary.toLowerCase()}${fileContext} to address ${jiraTicket.key}`;
-  }
-
-  private generateEnhancedFallbackSummary(jiraTicket: JiraTicket, gitChanges: GitChanges, repoInfo?: { owner: string; repo: string; currentBranch: string }): string {
-    const action = this.getActionFromIssueType(jiraTicket.issueType);
-
-    let summary = `## Overview\n`;
-    summary += `${action} ${jiraTicket.summary.toLowerCase()} to address ${jiraTicket.key}.\n\n`;
-
-    if (jiraTicket.description) {
-      summary += `This implementation fulfills the requirements outlined in the JIRA ticket: ${jiraTicket.description.substring(0, 200)}${jiraTicket.description.length > 200 ? '...' : ''}\n\n`;
-    }
-
-    summary += `## File Changes\n`;
-    summary += `Total files modified: ${gitChanges.totalFiles} (+${gitChanges.totalInsertions} insertions, -${gitChanges.totalDeletions} deletions)\n\n`;
-
-    gitChanges.files.forEach(file => {
-      if (repoInfo) {
-        const fileUrl = this.generateFileUrl(repoInfo, file.file);
-        summary += `### [${file.file}](${fileUrl}) (${file.status})\n`;
-      } else {
-        summary += `### \`${file.file}\` (${file.status})\n`;
-      }
-      summary += `- **Changes**: +${file.insertions} insertions, -${file.deletions} deletions\n`;
-
-      // Add specific line URLs for key changes if repo info is available
-      if (repoInfo && file.lineNumbers?.added.length && file.lineNumbers.added.length > 0) {
-        const keyLines = file.lineNumbers.added.slice(0, 3);
-        if (keyLines.length > 0) {
-          const lineLinks = this.generateLineLinks(repoInfo, file.file, keyLines);
-          summary += `- **Key changes**: ${lineLinks}\n`;
-        }
-      }
-
-      if (file.lineNumbers) {
-        if (file.lineNumbers.added.length > 0) {
-          const addedLines = file.lineNumbers.added.slice(0, 5);
-          summary += `- **Key additions**: Lines ${addedLines.join(', ')}${file.lineNumbers.added.length > 5 ? ` (and ${file.lineNumbers.added.length - 5} more)` : ''}\n`;
-        }
-        if (file.lineNumbers.removed.length > 0) {
-          const removedLines = file.lineNumbers.removed.slice(0, 5);
-          summary += `- **Key removals**: Lines ${removedLines.join(', ')}${file.lineNumbers.removed.length > 5 ? ` (and ${file.lineNumbers.removed.length - 5} more)` : ''}\n`;
-        }
-      }
-
-      summary += `- **Purpose**: ${this.getFileRelevanceDescription(file, jiraTicket)}\n\n`;
-    });
-
-    summary += `## Key Implementation Details\n`;
-    const significantFiles = gitChanges.files.filter(f => f.insertions + f.deletions > 10);
-    if (significantFiles.length > 0) {
-      summary += `The most significant changes are in:\n`;
-      significantFiles.forEach(file => {
-        summary += `- **${file.file}**: Contains ${file.insertions + file.deletions} total changes`;
-        if (file.lineNumbers?.added.length) {
-          summary += `, with major additions around lines ${file.lineNumbers.added.slice(0, 3).join(', ')}`;
-        }
-        summary += `\n`;
-      });
-    } else {
-      summary += `All changes are relatively small in scope, focusing on targeted modifications to implement the required functionality.\n`;
-    }
-
-    return summary;
-  }
-
-  private generateShortTitle(jiraTicket: JiraTicket): string {
-    // Extract key action and subject from summary
-    const action = this.getActionFromIssueType(jiraTicket.issueType);
-    const subject = this.extractSubjectFromSummary(jiraTicket.summary);
-
-    // Create short title with JIRA ticket ID at the beginning
-    const maxDescriptionLength = 60 - jiraTicket.key.length - 2; // Reserve space for "KEY: "
-    const description = `${action} ${subject}`;
-
-    if (description.length <= maxDescriptionLength) {
-      return `${jiraTicket.key}: ${description}`;
-    } else {
-      // Truncate description to fit
-      const truncated = description.substring(0, maxDescriptionLength - 3);
-      return `${jiraTicket.key}: ${truncated}...`;
-    }
-  }
-
-  private getActionFromIssueType(issueType: string): string {
-    const type = issueType.toLowerCase();
-    if (type.includes('bug') || type.includes('fix')) return 'Fix';
-    if (type.includes('feature') || type.includes('story')) return 'Add';
-    if (type.includes('improvement') || type.includes('enhance')) return 'Improve';
-    if (type.includes('task')) return 'Update';
-    if (type.includes('refactor')) return 'Refactor';
-    return 'Implement';
-  }
-
-  private extractSubjectFromSummary(summary: string): string {
-    // Remove common prefixes and clean up the summary
-    const subject = summary
-      .replace(/^(add|implement|create|fix|update|improve|refactor)\s+/i, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    // Capitalize first letter
-    return subject.charAt(0).toUpperCase() + subject.slice(1);
-  }
 
   private extractDiffSummary(diffContent: string): string[] {
     const summary: string[] = [];
