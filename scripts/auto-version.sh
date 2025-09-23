@@ -35,7 +35,7 @@ has_typescript_changes() {
     changed_files=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
 
     # Check for TypeScript files (.ts, .tsx)
-    if echo "$changed_files" | grep -q "\\.tsx\?$"; then
+    if echo "$changed_files" | grep -q "\\.tsx\?$\|\\.ts$"; then
         return 0  # Has TypeScript changes
     fi
 
