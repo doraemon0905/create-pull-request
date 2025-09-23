@@ -1,6 +1,6 @@
 // Load package.json to get dynamic version
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 // Function to get version from package.json
 function getPackageVersion(): string {
