@@ -128,37 +128,13 @@ describe('AIDescriptionGeneratorService', () => {
       expect(result.body).toContain('Implemented new test feature');
     });
 
-    it('should fallback to ChatGPT when Claude fails', async () => {
-      // Claude fails, ChatGPT succeeds
-      const mockClaudeInstance = {
-        post: jest.fn().mockRejectedValue(new Error('Claude API error')),
-        defaults: { timeout: 30000 }
+    it('should use selected AI provider without fallback', async () => {
+      const mockResponse = {
+        content: [{
+          text: '{"title": "PROJ-123: Test feature", "body": "## Summary\\nTest implementation"}'
+        }]
       };
-      const mockChatGPTInstance = {
-        post: jest.fn().mockResolvedValue({
-          data: {
-            choices: [{
-              message: {
-                content: '{"title": "PROJ-123: Test feature", "body": "## Summary\\nTest implementation"}'
-              }
-            }]
-          }
-        }),
-        defaults: { timeout: 30000 }
-      };
-      const mockGeminiInstance = {
-        post: jest.fn(),
-        defaults: { timeout: 30000 }
-      };
-
-      // Mock the order of create calls for providers
-      mockedAxios.create
-        .mockReturnValueOnce(mockClaudeInstance as any)
-        .mockReturnValueOnce(mockChatGPTInstance as any)
-        .mockReturnValueOnce(mockGeminiInstance as any)
-        .mockReturnValue({} as any);
-
-      service = new AIDescriptionGeneratorService();
+      mockAxiosInstance.post.mockResolvedValue({ data: mockResponse });
 
       const result = await service.generatePRDescription(mockOptions);
 
@@ -178,160 +154,12 @@ describe('AIDescriptionGeneratorService', () => {
       expect(result.body).toBeDefined();
     });
 
-    it('should use fallback description when all AI providers fail', async () => {
+    it('should throw error when AI provider fails', async () => {
       mockAxiosInstance.post.mockRejectedValue(new Error('API error'));
 
-      const result = await service.generatePRDescription(mockOptions);
-
-      expect(result.title).toContain('PROJ-123');
-      expect(result.body).toContain('Summary');
+      await expect(service.generatePRDescription(mockOptions)).rejects.toThrow('API error');
     });
 
-    it('should handle ChatGPT API returning undefined data gracefully', async () => {
-      // Claude fails, ChatGPT returns undefined data
-      const mockClaudeInstance = {
-        post: jest.fn().mockRejectedValue(new Error('Claude API error')),
-        defaults: { timeout: 30000 }
-      };
-      const mockChatGPTInstance = {
-        post: jest.fn().mockResolvedValue({}), // No data property
-        defaults: { timeout: 30000 }
-      };
-      const mockGeminiInstance = {
-        post: jest.fn().mockRejectedValue(new Error('Gemini API error')),
-        defaults: { timeout: 30000 }
-      };
-      const mockCopilotInstance = {
-        post: jest.fn().mockResolvedValue({}), // No data property
-        defaults: { timeout: 30000 }
-      };
-
-      mockedAxios.create
-        .mockReturnValueOnce(mockClaudeInstance as any)
-        .mockReturnValueOnce(mockChatGPTInstance as any)
-        .mockReturnValueOnce(mockGeminiInstance as any)
-        .mockReturnValueOnce(mockCopilotInstance as any)
-        .mockReturnValue({} as any);
-
-      service = new AIDescriptionGeneratorService();
-
-      const result = await service.generatePRDescription(mockOptions);
-
-      // Should fallback to template-based or default description, not throw
-      expect(result).toBeDefined();
-      expect(result.title).toContain('PROJ-123');
-      expect(result.body).toContain('Summary');
-    });
-
-    it('should handle ChatGPT API returning data but missing choices gracefully', async () => {
-      // Claude fails, ChatGPT returns data but no choices
-      const mockClaudeInstance = {
-        post: jest.fn().mockRejectedValue(new Error('Claude API error')),
-        defaults: { timeout: 30000 }
-      };
-      const mockChatGPTInstance = {
-        post: jest.fn().mockResolvedValue({ data: {} }), // data exists, but no choices
-        defaults: { timeout: 30000 }
-      };
-      const mockGeminiInstance = {
-        post: jest.fn().mockRejectedValue(new Error('Gemini API error')),
-        defaults: { timeout: 30000 }
-      };
-      const mockCopilotInstance = {
-        post: jest.fn().mockResolvedValue({}), // No data property
-        defaults: { timeout: 30000 }
-      };
-
-      mockedAxios.create
-        .mockReturnValueOnce(mockClaudeInstance as any)
-        .mockReturnValueOnce(mockChatGPTInstance as any)
-        .mockReturnValueOnce(mockGeminiInstance as any)
-        .mockReturnValueOnce(mockCopilotInstance as any)
-        .mockReturnValue({} as any);
-
-      service = new AIDescriptionGeneratorService();
-
-      const result = await service.generatePRDescription(mockOptions);
-
-      // Should fallback to template-based or default description, not throw
-      expect(result).toBeDefined();
-      expect(result.title).toContain('PROJ-123');
-      expect(result.body).toContain('Summary');
-    });
-
-    it('should handle Copilot API returning undefined data gracefully', async () => {
-      // All providers fail or return undefined data, including Copilot
-      const mockClaudeInstance = {
-        post: jest.fn().mockRejectedValue(new Error('Claude API error')),
-        defaults: { timeout: 30000 }
-      };
-      const mockChatGPTInstance = {
-        post: jest.fn().mockRejectedValue(new Error('ChatGPT API error')),
-        defaults: { timeout: 30000 }
-      };
-      const mockGeminiInstance = {
-        post: jest.fn().mockRejectedValue(new Error('Gemini API error')),
-        defaults: { timeout: 30000 }
-      };
-      // Patch: Copilot returns { data: undefined } instead of {}
-      const mockCopilotInstance = {
-        post: jest.fn().mockResolvedValue({ data: undefined }),
-        defaults: { timeout: 30000 }
-      };
-
-      mockedAxios.create
-        .mockReturnValueOnce(mockClaudeInstance as any)
-        .mockReturnValueOnce(mockChatGPTInstance as any)
-        .mockReturnValueOnce(mockGeminiInstance as any)
-        .mockReturnValueOnce(mockCopilotInstance as any)
-        .mockReturnValue({} as any);
-
-      service = new AIDescriptionGeneratorService();
-
-      const result = await service.generatePRDescription(mockOptions);
-
-      // Should fallback to template-based or default description, not throw
-      expect(result).toBeDefined();
-      expect(result.title).toContain('PROJ-123');
-      expect(result.body).toContain('Summary');
-    });
-
-    it('should handle Copilot API returning data but missing choices gracefully', async () => {
-      // All providers fail or return data with missing expected fields, including Copilot
-      const mockClaudeInstance = {
-        post: jest.fn().mockRejectedValue(new Error('Claude API error')),
-        defaults: { timeout: 30000 }
-      };
-      const mockChatGPTInstance = {
-        post: jest.fn().mockRejectedValue(new Error('ChatGPT API error')),
-        defaults: { timeout: 30000 }
-      };
-      const mockGeminiInstance = {
-        post: jest.fn().mockRejectedValue(new Error('Gemini API error')),
-        defaults: { timeout: 30000 }
-      };
-      // Patch: Copilot returns { data: undefined } instead of { data: {} }
-      const mockCopilotInstance = {
-        post: jest.fn().mockResolvedValue({ data: undefined }),
-        defaults: { timeout: 30000 }
-      };
-
-      mockedAxios.create
-        .mockReturnValueOnce(mockClaudeInstance as any)
-        .mockReturnValueOnce(mockChatGPTInstance as any)
-        .mockReturnValueOnce(mockGeminiInstance as any)
-        .mockReturnValueOnce(mockCopilotInstance as any)
-        .mockReturnValue({} as any);
-
-      service = new AIDescriptionGeneratorService();
-
-      const result = await service.generatePRDescription(mockOptions);
-
-      // Should fallback to template-based or default description, not throw
-      expect(result).toBeDefined();
-      expect(result.title).toContain('PROJ-123');
-      expect(result.body).toContain('Summary');
-    });
   });
 
   describe('Claude API integration', () => {
@@ -407,7 +235,7 @@ describe('AIDescriptionGeneratorService', () => {
       }));
     });
 
-    it('should handle ChatGPT API returning undefined data gracefully', async () => {
+    it('should throw error when ChatGPT API returns undefined data', async () => {
       // Only OpenAI configured
       mockedGetConfig.mockImplementation((section: any) => {
         switch (section) {
@@ -427,14 +255,11 @@ describe('AIDescriptionGeneratorService', () => {
         .mockReturnValue({} as any);
 
       service = new AIDescriptionGeneratorService();
-      const result = await service.generatePRDescription(mockOptions);
-
-      expect(result).toBeDefined();
-      expect(result.title).toContain('PROJ-123');
-      expect(result.body).toContain('Summary');
+      
+      await expect(service.generatePRDescription(mockOptions)).rejects.toThrow('No content received from ChatGPT API');
     });
 
-    it('should handle ChatGPT API returning data but missing choices gracefully', async () => {
+    it('should throw error when ChatGPT API returns data but missing choices', async () => {
       // Only OpenAI configured
       mockedGetConfig.mockImplementation((section: any) => {
         switch (section) {
@@ -454,11 +279,8 @@ describe('AIDescriptionGeneratorService', () => {
         .mockReturnValue({} as any);
 
       service = new AIDescriptionGeneratorService();
-      const result = await service.generatePRDescription(mockOptions);
-
-      expect(result).toBeDefined();
-      expect(result.title).toContain('PROJ-123');
-      expect(result.body).toContain('Summary');
+      
+      await expect(service.generatePRDescription(mockOptions)).rejects.toThrow('No content received from ChatGPT API');
     });
   });
 
@@ -471,15 +293,28 @@ describe('AIDescriptionGeneratorService', () => {
       mockedGetConfig.mockImplementation((section: any) => {
         switch (section) {
           case 'github':
-            return {};
+            return { token: null };
           case 'copilot':
-            return {};
+            return { apiToken: null };
           case 'aiProviders':
-            return { gemini: { apiKey: 'gemini-key', model: 'gemini-1.5-pro' } };
+            return { 
+              gemini: { apiKey: 'gemini-key', model: 'gemini-1.5-pro' },
+              claude: { apiKey: null },
+              openai: { apiKey: null },
+              copilot: { apiToken: null }
+            };
           default:
             return {};
         }
       });
+
+      // Also clear environment variables for other providers
+      delete process.env.ANTHROPIC_API_KEY;
+      delete process.env.CLAUDE_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      delete process.env.CHATGPT_API_KEY;
+      // Set only Gemini key
+      process.env.GEMINI_API_KEY = 'gemini-key';
 
       const mockGeminiInstance = {
         post: jest.fn().mockResolvedValue({
@@ -523,18 +358,32 @@ describe('AIDescriptionGeneratorService', () => {
   });
 
   describe('Copilot API integration', () => {
-    it('should handle Copilot API returning undefined data gracefully', async () => {
+    it('should throw error when Copilot API returns undefined data', async () => {
       // Only Copilot configured
       mockedGetConfig.mockImplementation((section: any) => {
         switch (section) {
           case 'aiProviders':
-            return {};
+            return {
+              claude: { apiKey: null },
+              openai: { apiKey: null },
+              gemini: { apiKey: null }
+            };
           case 'copilot':
             return { apiToken: 'copilot-token' };
+          case 'github':
+            return { token: 'copilot-token' };
           default:
             return {};
         }
       });
+
+      // Clear environment variables for other providers
+      delete process.env.ANTHROPIC_API_KEY;
+      delete process.env.CLAUDE_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      delete process.env.CHATGPT_API_KEY;
+      delete process.env.GEMINI_API_KEY;
+      delete process.env.GOOGLE_API_KEY;
 
       // Patch: Copilot returns { data: undefined } instead of {}
       const mockCopilotInstance = {
@@ -542,33 +391,40 @@ describe('AIDescriptionGeneratorService', () => {
         defaults: { timeout: 30000 }
       };
 
-      mockedAxios.create
-        .mockReturnValueOnce({} as any) // Claude
-        .mockReturnValueOnce({} as any) // ChatGPT
-        .mockReturnValueOnce({} as any) // Gemini
-        .mockReturnValueOnce(mockCopilotInstance as any)
-        .mockReturnValue({} as any);
+      // Mock axios.create to return the Copilot instance
+      mockedAxios.create.mockReturnValue(mockCopilotInstance as any);
 
       service = new AIDescriptionGeneratorService();
-      const result = await service.generatePRDescription(mockOptions);
-
-      expect(result).toBeDefined();
-      expect(result.title).toContain('PROJ-123');
-      expect(result.body).toContain('Summary');
+      
+      await expect(service.generatePRDescription(mockOptions)).rejects.toThrow('No content received from Copilot API');
     });
 
-    it('should handle Copilot API returning data but missing expected fields gracefully', async () => {
+    it('should throw error when Copilot API returns data but missing expected fields', async () => {
       // Only Copilot configured
       mockedGetConfig.mockImplementation((section: any) => {
         switch (section) {
           case 'aiProviders':
-            return {};
+            return {
+              claude: { apiKey: null },
+              openai: { apiKey: null },
+              gemini: { apiKey: null }
+            };
           case 'copilot':
             return { apiToken: 'copilot-token' };
+          case 'github':
+            return { token: 'copilot-token' };
           default:
             return {};
         }
       });
+
+      // Clear environment variables for other providers
+      delete process.env.ANTHROPIC_API_KEY;
+      delete process.env.CLAUDE_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      delete process.env.CHATGPT_API_KEY;
+      delete process.env.GEMINI_API_KEY;
+      delete process.env.GOOGLE_API_KEY;
 
       // Patch: Copilot returns { data: undefined } instead of { data: {} }
       const mockCopilotInstance = {
@@ -576,19 +432,12 @@ describe('AIDescriptionGeneratorService', () => {
         defaults: { timeout: 30000 }
       };
 
-      mockedAxios.create
-        .mockReturnValueOnce({} as any) // Claude
-        .mockReturnValueOnce({} as any) // ChatGPT
-        .mockReturnValueOnce({} as any) // Gemini
-        .mockReturnValueOnce(mockCopilotInstance as any)
-        .mockReturnValue({} as any);
+      // Mock axios.create to return the Copilot instance
+      mockedAxios.create.mockReturnValue(mockCopilotInstance as any);
 
       service = new AIDescriptionGeneratorService();
-      const result = await service.generatePRDescription(mockOptions);
-
-      expect(result).toBeDefined();
-      expect(result.title).toContain('PROJ-123');
-      expect(result.body).toContain('Summary');
+      
+      await expect(service.generatePRDescription(mockOptions)).rejects.toThrow('No content received from Copilot API');
     });
   });
 
@@ -599,14 +448,10 @@ describe('AIDescriptionGeneratorService', () => {
       expect(() => new AIDescriptionGeneratorService()).not.toThrow();
     });
 
-    it('should handle network errors gracefully', async () => {
+    it('should throw error on network failures', async () => {
       mockAxiosInstance.post.mockRejectedValue(new Error('Network error'));
 
-      const result = await service.generatePRDescription(mockOptions);
-
-      // Should fall back to template-based generation
-      expect(result).toBeDefined();
-      expect(result.title).toContain('PROJ-123');
+      await expect(service.generatePRDescription(mockOptions)).rejects.toThrow('Network error');
     });
   });
 

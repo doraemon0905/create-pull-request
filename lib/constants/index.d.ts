@@ -6,13 +6,13 @@ export declare const API_URLS: {
     readonly JIRA_API_VERSION: "/rest/api/3";
 };
 export declare const DEFAULT_MODELS: {
-    readonly CLAUDE: "claude-3-5-sonnet-20241022";
+    readonly CLAUDE: "claude-sonnet-4-20250514";
     readonly OPENAI: "gpt-4o";
     readonly GEMINI: "gemini-1.5-pro";
     readonly COPILOT: "gpt-4o";
 };
 export declare const LIMITS: {
-    readonly API_TIMEOUT_MS: 30000;
+    readonly API_TIMEOUT_MS: 3000000;
     readonly MAX_API_TOKENS: 4000;
     readonly MAX_PR_TITLE_LENGTH: 256;
     readonly DEFAULT_MAX_DIFF_LINES: 1000;

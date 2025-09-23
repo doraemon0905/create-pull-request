@@ -50,7 +50,7 @@ export function extractJiraTicketFromBranch(branchName: string): string | null {
 }
 
 export function validateGitRepository(): void {
-  const { execSync } = require('child_process');
+  const { execSync } = require('node:child_process');
 
   try {
     execSync('git rev-parse --is-inside-work-tree', { stdio: 'ignore' });
