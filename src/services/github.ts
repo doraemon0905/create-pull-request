@@ -65,48 +65,75 @@ export class GitHubService {
 
   async getPullRequestTemplates(): Promise<PullRequestTemplate[]> {
     const templates: PullRequestTemplate[] = [];
+
+    // Get templates from predefined paths
+    const predefinedTemplates = this.loadPredefinedTemplates();
+    templates.push(...predefinedTemplates);
+
+    // Get templates from directory
+    const directoryTemplates = this.loadDirectoryTemplates();
+    templates.push(...directoryTemplates);
+
+    return templates;
+  }
+
+  private loadPredefinedTemplates(): PullRequestTemplate[] {
+    const templates: PullRequestTemplate[] = [];
     const possiblePaths = FILE_PATHS.PR_TEMPLATE_PATHS;
 
-    // Check for templates in predefined paths
     for (const templatePath of possiblePaths) {
-      try {
-        if (fs.existsSync(templatePath)) {
-          const content = fs.readFileSync(templatePath, 'utf-8');
-          templates.push({
-            name: templatePath.includes('/') ? templatePath.split('/').pop()! : templatePath,
-            content
-          });
-        }
-      } catch {
-        // Template doesn't exist at this path, continue
+      const template = this.tryLoadTemplate(templatePath);
+      if (template) {
+        templates.push(template);
       }
-    }
-
-    // Check for multiple templates in .github/PULL_REQUEST_TEMPLATE directory
-    const templateDir = '.github/PULL_REQUEST_TEMPLATE';
-    try {
-      if (fs.existsSync(templateDir)) {
-        const files = fs.readdirSync(templateDir);
-        for (const file of files) {
-          if (file.endsWith('.md')) {
-            const filePath = path.join(templateDir, file);
-            try {
-              const content = fs.readFileSync(filePath, 'utf-8');
-              templates.push({
-                name: file,
-                content
-              });
-            } catch {
-              // Skip files that can't be read
-            }
-          }
-        }
-      }
-    } catch {
-      // Directory doesn't exist, continue
     }
 
     return templates;
+  }
+
+  private loadDirectoryTemplates(): PullRequestTemplate[] {
+    const templates: PullRequestTemplate[] = [];
+    const templateDir = '.github/PULL_REQUEST_TEMPLATE';
+
+    try {
+      if (!fs.existsSync(templateDir)) {
+        return templates;
+      }
+
+      const files = fs.readdirSync(templateDir);
+      const markdownFiles = files.filter(file => file.endsWith('.md'));
+
+      for (const file of markdownFiles) {
+        const filePath = path.join(templateDir, file);
+        const template = this.tryLoadTemplate(filePath, file);
+        if (template) {
+          templates.push(template);
+        }
+      }
+    } catch {
+      // Directory doesn't exist or can't be read, continue
+    }
+
+    return templates;
+  }
+
+  private tryLoadTemplate(templatePath: string, customName?: string): PullRequestTemplate | null {
+    try {
+      if (!fs.existsSync(templatePath)) {
+        return null;
+      }
+
+      const content = fs.readFileSync(templatePath, 'utf-8');
+      const name = customName || this.extractTemplateNameFromPath(templatePath);
+
+      return { name, content };
+    } catch {
+      return null;
+    }
+  }
+
+  private extractTemplateNameFromPath(templatePath: string): string {
+    return templatePath.includes('/') ? templatePath.split('/').pop()! : templatePath;
   }
 
   async findExistingPullRequest(repo: GitHubRepo, branch: string): Promise<any | null> {

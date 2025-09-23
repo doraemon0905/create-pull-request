@@ -318,9 +318,11 @@ describe('GitHubService', () => {
     it('should handle multiple templates in directory', async () => {
       const templateDir = '.github/PULL_REQUEST_TEMPLATE';
 
-      // Mock first check for individual templates (none exist)
+      // Mock first check for individual templates (none exist, but directory and files exist)
       jest.mocked(mockedFs.existsSync).mockImplementation((path: any) => {
         if (path === templateDir) return true;
+        if (path === `${templateDir}/template1.md`) return true;
+        if (path === `${templateDir}/template2.md`) return true;
         return false;
       });
 
