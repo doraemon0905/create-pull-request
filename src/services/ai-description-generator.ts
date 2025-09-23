@@ -62,8 +62,8 @@ export class AIDescriptionGeneratorService {
       this.clients.set('claude', axios.create({
         baseURL: API_URLS.CLAUDE_BASE_URL,
         headers: {
-          'Authorization': `Bearer ${claudeKey}`,
-          'Content-Type': HEADERS.JSON_CONTENT_TYPE,
+          'x-api-key': claudeKey,
+          'content-type': HEADERS.JSON_CONTENT_TYPE,
           'anthropic-version': '2023-06-01'
         },
         timeout: LIMITS.API_TIMEOUT_MS
@@ -284,7 +284,7 @@ export class AIDescriptionGeneratorService {
     summaryPrompt += `   - The specific problem this solves from the ticket description\n`;
     summaryPrompt += `   - The impact on the system, users, and related components\n`;
     summaryPrompt += `   - How the implementation validates against the acceptance criteria\n`;
-    summaryPrompt += `3. For EACH modified file, provides EXTENSIVE detail including:\n`;
+    summaryPrompt += `3. For EACH modified file, provides EXTENSIVE detail in the File Changes Analysis section including:\n`;
     summaryPrompt += `   - File header as clickable link: [src/filename.ext](GitHub_URL)\n`;
     summaryPrompt += `   - COMPREHENSIVE explanation of what changed (5-7 sentences minimum)\n`;
     summaryPrompt += `   - DETAILED analysis of how each change maps to specific JIRA ticket requirements\n`;
@@ -294,6 +294,7 @@ export class AIDescriptionGeneratorService {
     summaryPrompt += `   - HOW the new implementation solves the problems described in the ticket\n`;
     summaryPrompt += `   - Specific code patterns added/removed (from the provided diffs)\n`;
     summaryPrompt += `   - MANDATORY: Multiple specific line links for ALL significant changes\n`;
+    summaryPrompt += `   - CRITICAL: This file analysis MUST be included in the summary's File Changes Analysis section\n`;
     if (repoInfo) {
       summaryPrompt += `   - MUST include all GitHub file URLs provided above for navigation\n`;
       summaryPrompt += `   - REQUIRED: Link to EVERY significant line change using GitHub line URLs\n`;
@@ -324,16 +325,22 @@ export class AIDescriptionGeneratorService {
     summaryPrompt += `Format the response as a COMPREHENSIVE structured summary with these sections:\n`;
     summaryPrompt += `- Ticket URLs (Jira, Sentry, etc.) at the very top\n`;
     summaryPrompt += `- Detailed Overview (6-8 sentences explaining the change and impact)\n`;
-    summaryPrompt += `- File Changes (extensive file-by-file analysis with 4-6 line links each)\n`;
+    summaryPrompt += `- File Changes Analysis (MANDATORY: extensive file-by-file analysis with 4-6 line links each - this is CRITICAL and must be included in the summary)\n`;
     summaryPrompt += `- Technical Implementation Details (methods, functions, integration points)\n`;
     summaryPrompt += `- Business Value and Impact (how it fulfills JIRA requirements)\n`;
     summaryPrompt += `- Review Focus Areas (critical changes with specific line references)\n\n`;
+    summaryPrompt += `CRITICAL REQUIREMENT: The "File Changes Analysis" section is MANDATORY in the summary and must include:\n`;
+    summaryPrompt += `- Complete analysis of every modified file with detailed explanations\n`;
+    summaryPrompt += `- All GitHub file URLs and line links for navigation\n`;
+    summaryPrompt += `- Detailed explanation of what changed in each file and why\n`;
+    summaryPrompt += `- Connection between file changes and JIRA ticket requirements\n`;
+    summaryPrompt += `- Before/after comparison for modified code sections\n\n`;
     summaryPrompt += `IMPORTANT: Do NOT include any checklists, checkboxes, or "- [ ]" items in the summary. Use bullet points and descriptive text only.\n`;
     if (template) {
       summaryPrompt += `TEMPLATE CHECKBOX RULE: If the PR template contains checkboxes, preserve them EXACTLY as they appear. Do not modify, fill, or check any existing checkboxes.\n`;
     }
     summaryPrompt += `IMPORTANT: Return the response as JSON with a single "summary" field containing the structured summary content. Use markdown formatting within the summary text.\n`;
-    summaryPrompt += `Example format: {"summary": "## Overview\\n[content here]\\n\\n## File Changes\\n[content here]"}\n`;
+    summaryPrompt += `Example format: {"summary": "## Overview\\n[content here]\\n\\n## File Changes Analysis\\n[detailed file-by-file analysis with line links]\\n\\n## Technical Implementation Details\\n[content here]"}\n`;
     summaryPrompt += `CRITICAL: Return ONLY the raw JSON object. Do NOT wrap it in markdown code blocks (\`\`\`json). Do NOT include any text before or after the JSON.\n`;
 
     if (template) {
@@ -618,7 +625,6 @@ export class AIDescriptionGeneratorService {
 
   private async callClaudeAPI(client: AxiosInstance, prompt: string): Promise<any> {
     const model = this.getModelForProvider('claude');
-
     const response = await client.post('/v1/messages', {
       model: model,
       max_tokens: LIMITS.MAX_API_TOKENS,
