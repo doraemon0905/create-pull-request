@@ -31,7 +31,6 @@ export declare class AIDescriptionGeneratorService {
     private initializeClients;
     generatePRDescription(options: GenerateDescriptionOptions): Promise<GeneratedPRContent>;
     private selectAIProvider;
-    private tryFallbackProviders;
     private generateSummary;
     private buildPrompt;
     private callAIAPI;
@@ -50,13 +49,7 @@ export declare class AIDescriptionGeneratorService {
     private extractContentFromResponse;
     private parseResponseContent;
     private extractTitle;
-    private generateFallbackDescription;
     private getFileRelevanceDescription;
-    private generateFallbackSummary;
-    private generateEnhancedFallbackSummary;
-    private generateShortTitle;
-    private getActionFromIssueType;
-    private extractSubjectFromSummary;
     private extractDiffSummary;
 }
 //# sourceMappingURL=ai-description-generator.d.ts.map
