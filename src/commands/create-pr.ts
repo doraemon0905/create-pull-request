@@ -1,6 +1,6 @@
 import inquirer from 'inquirer';
 import chalk from 'chalk';
-import ora from 'ora';
+import { createSpinner } from '../utils/spinner.js';
 import { JiraService } from '../services/jira.js';
 import { GitHubService } from '../services/github.js';
 import { GitService } from '../services/git.js';
@@ -17,7 +17,7 @@ export interface CreatePROptions {
 }
 
 export async function createPullRequest(options: CreatePROptions): Promise<void> {
-  const spinner = ora();
+  const spinner = createSpinner();
 
   try {
     // Validate git repository
