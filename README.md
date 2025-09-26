@@ -279,6 +279,43 @@ npm run lint
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## Automated Jira Ticket Creation for Dependabot Security PRs
+
+This repository includes a GitHub Actions workflow that automatically creates Jira tickets when Dependabot raises security-related pull requests. This ensures security vulnerabilities are properly tracked and prioritized in your project management system.
+
+### Workflow Features
+
+- **Automatic Trigger**: Activates when Dependabot opens PRs with 'Security' in the title
+- **Jira Integration**: Creates high-priority tickets with PR details and vulnerability information
+- **PR Enhancement**: Adds comments with ticket links and applies security/dependabot labels
+- **Error Handling**: Provides clear feedback if ticket creation fails
+
+### Required GitHub Secrets
+
+To enable this functionality, configure the following secrets in your repository:
+
+- `JIRA_BASE_URL`: Your Jira instance URL (e.g., `https://company.atlassian.net`)
+- `JIRA_USERNAME`: Your Jira username/email
+- `JIRA_API_TOKEN`: Your Jira API token
+- `JIRA_PROJECT_KEY`: The Jira project key where tickets should be created (e.g., `SEC`)
+
+### How It Works
+
+1. Dependabot opens a PR containing 'Security' in the title
+2. The workflow extracts PR details (title, URL, description)
+3. A high-priority Jira ticket is created with the security information
+4. The PR receives a comment with the ticket link
+5. Security and dependabot labels are applied to the PR
+
+### Jira API Integration
+
+The workflow uses the Jira REST API v3 to create tickets with:
+- **Summary**: Prefixed with "Security:" + PR title
+- **Description**: Formatted with PR details and vulnerability information
+- **Issue Type**: Task
+- **Priority**: High
+- **Project**: Uses the configured project key
+
 ## Troubleshooting
 
 ### Common Issues
