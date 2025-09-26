@@ -304,3 +304,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Support
 
 If you encounter any issues or have questions, please [open an issue](https://github.com/doraemon0905/create-pull-request/issues) on GitHub.
+
+## Sonarcloud Report
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=create-pull-request&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=create-pull-request)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=create-pull-request&metric=coverage)](https://sonarcloud.io/summary/new_code?id=create-pull-request)
