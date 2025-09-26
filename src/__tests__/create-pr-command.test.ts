@@ -123,6 +123,243 @@ describe('Create PR Command', () => {
       expect(validOptions).toHaveProperty('jira');
       expect(typeof createPullRequest).toBe('function');
     });
+
+    it('should retry AI description generation when user chooses to retry', async () => {
+      const inquirer = require('inquirer');
+
+      // Mock the basic methods needed
+      mockGitService.validateRepository = jest.fn().mockResolvedValue(undefined);
+      mockGitService.getCurrentBranch = jest.fn().mockResolvedValue('feature/PROJ-123');
+      mockGitService.hasUncommittedChanges = jest.fn().mockResolvedValue(false);
+      mockGitService.branchExists = jest.fn().mockResolvedValue(true);
+      mockGitService.getChanges = jest.fn().mockResolvedValue({
+        totalFiles: 2,
+        totalInsertions: 10,
+        totalDeletions: 5,
+        files: [],
+        commits: []
+      });
+      mockGitService.getDiffContent = jest.fn().mockResolvedValue('mock diff content');
+      mockGitService.pushCurrentBranch = jest.fn().mockResolvedValue(undefined);
+
+      mockGitHubService.getCurrentRepo = jest.fn().mockResolvedValue({ owner: 'test-owner', repo: 'test-repo' });
+      mockGitHubService.getPullRequestTemplates = jest.fn().mockResolvedValue([]);
+      mockGitHubService.createOrUpdatePullRequest = jest.fn().mockResolvedValue({
+        data: { html_url: 'http://github.com/test/pr/1', number: 1, title: 'Test PR' },
+        isUpdate: false
+      });
+
+      mockJiraService.getTicket = jest.fn().mockResolvedValue({
+        key: 'PROJ-123',
+        summary: 'Test ticket',
+        description: 'Test description',
+        issueType: 'Story',
+        status: 'In Progress'
+      });
+
+      // Mock AI service to fail once, then succeed
+      mockAIDescriptionService.generatePRDescription = jest.fn()
+        .mockRejectedValueOnce(new Error('AI service failed'))
+        .mockResolvedValueOnce({ title: 'Test PR', body: 'Test body', summary: 'Test summary' });
+
+      // Mock inquirer to return retry choice, then create action
+      inquirer.default.prompt
+        .mockResolvedValueOnce({ retry: true }) // First prompt: retry choice
+        .mockResolvedValueOnce({ action: 'create' }); // Second prompt: create action
+
+      await expect(createPullRequest(mockOptions)).resolves.toBeUndefined();
+
+      // Verify AI service was called twice (initial attempt + retry)
+      expect(mockAIDescriptionService.generatePRDescription).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not retry AI description generation when user chooses not to retry', async () => {
+      const inquirer = require('inquirer');
+
+      // Mock the basic methods needed
+      mockGitService.validateRepository = jest.fn().mockResolvedValue(undefined);
+      mockGitService.getCurrentBranch = jest.fn().mockResolvedValue('feature/PROJ-123');
+      mockGitService.hasUncommittedChanges = jest.fn().mockResolvedValue(false);
+      mockGitService.branchExists = jest.fn().mockResolvedValue(true);
+      mockGitService.getChanges = jest.fn().mockResolvedValue({
+        totalFiles: 2,
+        totalInsertions: 10,
+        totalDeletions: 5,
+        files: [],
+        commits: []
+      });
+      mockGitService.getDiffContent = jest.fn().mockResolvedValue('mock diff content');
+
+      mockGitHubService.getCurrentRepo = jest.fn().mockResolvedValue({ owner: 'test-owner', repo: 'test-repo' });
+      mockGitHubService.getPullRequestTemplates = jest.fn().mockResolvedValue([]);
+
+      mockJiraService.getTicket = jest.fn().mockResolvedValue({
+        key: 'PROJ-123',
+        summary: 'Test ticket',
+        description: 'Test description',
+        issueType: 'Story',
+        status: 'In Progress'
+      });
+
+      // Mock AI service to fail
+      const expectedError = new Error('AI service failed');
+      mockAIDescriptionService.generatePRDescription = jest.fn().mockRejectedValue(expectedError);
+
+      // Mock inquirer to return no retry choice
+      inquirer.default.prompt.mockResolvedValueOnce({ retry: false });
+
+      await expect(createPullRequest(mockOptions)).rejects.toThrow('AI service failed');
+
+      // Verify AI service was called only once (no retry)
+      expect(mockAIDescriptionService.generatePRDescription).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle multiple retry attempts and succeed on the third attempt', async () => {
+      const inquirer = require('inquirer');
+
+      // Mock the basic methods needed
+      mockGitService.validateRepository = jest.fn().mockResolvedValue(undefined);
+      mockGitService.getCurrentBranch = jest.fn().mockResolvedValue('feature/PROJ-123');
+      mockGitService.hasUncommittedChanges = jest.fn().mockResolvedValue(false);
+      mockGitService.branchExists = jest.fn().mockResolvedValue(true);
+      mockGitService.getChanges = jest.fn().mockResolvedValue({
+        totalFiles: 2,
+        totalInsertions: 10,
+        totalDeletions: 5,
+        files: [],
+        commits: []
+      });
+      mockGitService.getDiffContent = jest.fn().mockResolvedValue('mock diff content');
+      mockGitService.pushCurrentBranch = jest.fn().mockResolvedValue(undefined);
+
+      mockGitHubService.getCurrentRepo = jest.fn().mockResolvedValue({ owner: 'test-owner', repo: 'test-repo' });
+      mockGitHubService.getPullRequestTemplates = jest.fn().mockResolvedValue([]);
+      mockGitHubService.createOrUpdatePullRequest = jest.fn().mockResolvedValue({
+        data: { html_url: 'http://github.com/test/pr/1', number: 1, title: 'Test PR' },
+        isUpdate: false
+      });
+
+      mockJiraService.getTicket = jest.fn().mockResolvedValue({
+        key: 'PROJ-123',
+        summary: 'Test ticket',
+        description: 'Test description',
+        issueType: 'Story',
+        status: 'In Progress'
+      });
+
+      // Mock AI service to fail three times, then succeed
+      mockAIDescriptionService.generatePRDescription = jest.fn()
+        .mockRejectedValueOnce(new Error('AI service failed'))
+        .mockRejectedValueOnce(new Error('AI service failed again'))
+        .mockRejectedValueOnce(new Error('AI service failed once more'))
+        .mockResolvedValueOnce({ title: 'Test PR', body: 'Test body', summary: 'Test summary' });
+
+      // Mock inquirer responses
+      inquirer.default.prompt
+        .mockResolvedValueOnce({ retry: true }) // Initial retry choice
+        .mockResolvedValueOnce({ continueRetry: true }) // Continue after first retry failure
+        .mockResolvedValueOnce({ continueRetry: true }) // Continue after second retry failure
+        .mockResolvedValueOnce({ action: 'create' }); // Create action after success
+
+      await expect(createPullRequest(mockOptions)).resolves.toBeUndefined();
+
+      // Verify AI service was called 4 times (initial + 3 retries)
+      expect(mockAIDescriptionService.generatePRDescription).toHaveBeenCalledTimes(4);
+    });
+
+    it('should give up retrying when user chooses not to continue after retry failure', async () => {
+      const inquirer = require('inquirer');
+
+      // Mock the basic methods needed
+      mockGitService.validateRepository = jest.fn().mockResolvedValue(undefined);
+      mockGitService.getCurrentBranch = jest.fn().mockResolvedValue('feature/PROJ-123');
+      mockGitService.hasUncommittedChanges = jest.fn().mockResolvedValue(false);
+      mockGitService.branchExists = jest.fn().mockResolvedValue(true);
+      mockGitService.getChanges = jest.fn().mockResolvedValue({
+        totalFiles: 2,
+        totalInsertions: 10,
+        totalDeletions: 5,
+        files: [],
+        commits: []
+      });
+      mockGitService.getDiffContent = jest.fn().mockResolvedValue('mock diff content');
+
+      mockGitHubService.getCurrentRepo = jest.fn().mockResolvedValue({ owner: 'test-owner', repo: 'test-repo' });
+      mockGitHubService.getPullRequestTemplates = jest.fn().mockResolvedValue([]);
+
+      mockJiraService.getTicket = jest.fn().mockResolvedValue({
+        key: 'PROJ-123',
+        summary: 'Test ticket',
+        description: 'Test description',
+        issueType: 'Story',
+        status: 'In Progress'
+      });
+
+      // Mock AI service to fail twice
+      const expectedError = new Error('AI service failed again');
+      mockAIDescriptionService.generatePRDescription = jest.fn()
+        .mockRejectedValueOnce(new Error('AI service failed'))
+        .mockRejectedValueOnce(expectedError);
+
+      // Mock inquirer responses
+      inquirer.default.prompt
+        .mockResolvedValueOnce({ retry: true }) // Initial retry choice
+        .mockResolvedValueOnce({ continueRetry: false }); // Don't continue after first retry failure
+
+      await expect(createPullRequest(mockOptions)).rejects.toThrow('AI service failed again');
+
+      // Verify AI service was called twice (initial + 1 retry)
+      expect(mockAIDescriptionService.generatePRDescription).toHaveBeenCalledTimes(2);
+    });
+
+    it('should throw error after all retry attempts are exhausted', async () => {
+      const inquirer = require('inquirer');
+
+      // Mock the basic methods needed
+      mockGitService.validateRepository = jest.fn().mockResolvedValue(undefined);
+      mockGitService.getCurrentBranch = jest.fn().mockResolvedValue('feature/PROJ-123');
+      mockGitService.hasUncommittedChanges = jest.fn().mockResolvedValue(false);
+      mockGitService.branchExists = jest.fn().mockResolvedValue(true);
+      mockGitService.getChanges = jest.fn().mockResolvedValue({
+        totalFiles: 2,
+        totalInsertions: 10,
+        totalDeletions: 5,
+        files: [],
+        commits: []
+      });
+      mockGitService.getDiffContent = jest.fn().mockResolvedValue('mock diff content');
+
+      mockGitHubService.getCurrentRepo = jest.fn().mockResolvedValue({ owner: 'test-owner', repo: 'test-repo' });
+      mockGitHubService.getPullRequestTemplates = jest.fn().mockResolvedValue([]);
+
+      mockJiraService.getTicket = jest.fn().mockResolvedValue({
+        key: 'PROJ-123',
+        summary: 'Test ticket',
+        description: 'Test description',
+        issueType: 'Story',
+        status: 'In Progress'
+      });
+
+      // Mock AI service to fail consistently
+      const finalError = new Error('Final AI failure');
+      mockAIDescriptionService.generatePRDescription = jest.fn()
+        .mockRejectedValueOnce(new Error('AI service failed'))
+        .mockRejectedValueOnce(new Error('AI service failed again'))
+        .mockRejectedValueOnce(new Error('AI service failed once more'))
+        .mockRejectedValueOnce(finalError);
+
+      // Mock inquirer to continue retrying
+      inquirer.default.prompt
+        .mockResolvedValueOnce({ retry: true }) // Initial retry choice
+        .mockResolvedValueOnce({ continueRetry: true }) // Continue after first retry failure
+        .mockResolvedValueOnce({ continueRetry: true }); // Continue after second retry failure
+        // No third prompt because max retries (3) are reached
+
+      await expect(createPullRequest(mockOptions)).rejects.toThrow('Final AI failure');
+
+      // Verify AI service was called 4 times (initial + 3 retries)
+      expect(mockAIDescriptionService.generatePRDescription).toHaveBeenCalledTimes(4);
+    });
   });
 
   describe('CreatePROptions interface', () => {
