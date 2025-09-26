@@ -6,6 +6,26 @@ import { AIDescriptionGeneratorService } from '../services/ai-description-genera
 import { validateConfig } from '../utils/config';
 
 // Mock dependencies
+jest.mock('@octokit/rest', () => ({
+  Octokit: jest.fn().mockImplementation(() => ({
+    rest: {
+      repos: {
+        get: jest.fn(),
+        listPullRequestsAssociatedWithCommit: jest.fn(),
+        createOrUpdateFileContents: jest.fn(),
+        getContent: jest.fn()
+      },
+      pulls: {
+        create: jest.fn(),
+        update: jest.fn(),
+        get: jest.fn()
+      },
+      git: {
+        getRef: jest.fn()
+      }
+    }
+  }))
+}));
 jest.mock('../services/jira');
 jest.mock('../services/git');
 jest.mock('../services/github');

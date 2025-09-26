@@ -1,5 +1,5 @@
 module.exports = {
-  preset: 'ts-jest',
+  preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'node',
   roots: ['<rootDir>/src'],
   testMatch: [
@@ -7,7 +7,19 @@ module.exports = {
     '**/?(*.)+(spec|test).ts'
   ],
   transform: {
-    '^.+\\.ts$': 'ts-jest',
+    '^.+\\.ts$': ['ts-jest', {
+      useESM: true
+    }],
+  },
+  // Handle ES modules properly
+  extensionsToTreatAsEsm: ['.ts'],
+  // Transform ES modules from node_modules - include all @octokit packages
+  transformIgnorePatterns: [
+    'node_modules/(?!(@octokit|simple-git)/)'
+  ],
+  // Module name mapping for ES modules
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1'
   },
   collectCoverageFrom: [
     'src/**/*.ts',

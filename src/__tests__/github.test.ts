@@ -1,15 +1,35 @@
-import { Octokit } from '@octokit/rest';
 import { GitHubService } from '../services/github';
 import { getConfig } from '../utils/config';
 
 // Mock dependencies
-jest.mock('@octokit/rest');
+jest.mock('@octokit/rest', () => ({
+  Octokit: jest.fn().mockImplementation(() => ({
+    rest: {
+      repos: {
+        get: jest.fn(),
+        listPullRequestsAssociatedWithCommit: jest.fn(),
+        createOrUpdateFileContents: jest.fn(),
+        getContent: jest.fn()
+      },
+      pulls: {
+        create: jest.fn(),
+        update: jest.fn(),
+        get: jest.fn()
+      },
+      git: {
+        getRef: jest.fn()
+      }
+    }
+  }))
+}));
 jest.mock('../utils/config');
 jest.mock('simple-git');
 jest.mock('node:fs');
 jest.mock('node:path');
 
-const MockedOctokit = Octokit as jest.MockedClass<typeof Octokit>;
+// Get the mocked Octokit from the mock
+const { Octokit } = jest.requireMock('@octokit/rest');
+const MockedOctokit = Octokit as jest.MockedClass<any>;
 const mockedGetConfig = getConfig as jest.MockedFunction<typeof getConfig>;
 
 // Import mocked fs and path
