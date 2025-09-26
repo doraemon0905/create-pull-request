@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
-import { getConfig } from '../utils/config';
-import { API_URLS, JIRA_ENDPOINTS, HEADERS, HTTP_STATUS } from '../constants';
+import { getConfig } from '../utils/config.js';
+import { API_URLS, JIRA_ENDPOINTS, HEADERS, HTTP_STATUS } from '../constants/index.js';
 
 export interface JiraTicket {
   key: string;

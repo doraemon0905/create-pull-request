@@ -1,6 +1,6 @@
-import { JiraTicket } from './jira';
-import { GitChanges } from './git';
-import { PullRequestTemplate } from './github';
+import { JiraTicket } from './jira.js';
+import { GitChanges } from './git.js';
+import { PullRequestTemplate } from './github.js';
 export interface GenerateDescriptionOptions {
     jiraTicket: JiraTicket;
     gitChanges: GitChanges;

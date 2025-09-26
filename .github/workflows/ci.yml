@@ -214,12 +214,12 @@ jobs:
           fi
           
           # Verify CLI binary exists and is executable
-          if [ ! -f "bin/create-pr" ]; then
+          if [ ! -f "bin/create-pr.js" ]; then
             echo "❌ CLI binary missing!"
             exit 1
           fi
           
-          if [ ! -x "bin/create-pr" ]; then
+          if [ ! -x "bin/create-pr.js" ]; then
             echo "❌ CLI binary not executable!"
             exit 1
           fi
@@ -264,10 +264,10 @@ jobs:
           echo "🧪 Testing CLI functionality..."
           
           # Make binary executable (in case git doesn't preserve it)
-          chmod +x bin/create-pr
+          chmod +x bin/create-pr.js
           
           # Test help command
-          node bin/create-pr --help > /dev/null
+          node bin/create-pr.js --help > /dev/null
           if [ $? -eq 0 ]; then
             echo "✅ CLI help command works"
           else
@@ -276,7 +276,7 @@ jobs:
           fi
           
           # Test config command
-          node bin/create-pr config > /dev/null
+          node bin/create-pr.js config > /dev/null
           if [ $? -eq 0 ]; then
             echo "✅ CLI config command works"
           else

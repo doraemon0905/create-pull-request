@@ -1,5 +1,5 @@
 import { simpleGit, SimpleGit } from 'simple-git';
-import { CONFIG, LIMITS } from '../constants';
+import { CONFIG, LIMITS } from '../constants/index.js';
 
 export interface FileChange {
   file: string;

@@ -1,12 +1,12 @@
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 import ora from 'ora';
-import { JiraService } from '../services/jira';
-import { GitHubService } from '../services/github';
-import { GitService } from '../services/git';
-import { AIDescriptionGeneratorService } from '../services/ai-description-generator';
-import { validateJiraTicket, validateGitRepository, extractJiraTicketFromBranch } from '../utils/validation';
-import { CONFIG } from '../constants';
+import { JiraService } from '../services/jira.js';
+import { GitHubService } from '../services/github.js';
+import { GitService } from '../services/git.js';
+import { AIDescriptionGeneratorService } from '../services/ai-description-generator.js';
+import { validateJiraTicket, validateGitRepository, extractJiraTicketFromBranch } from '../utils/validation.js';
+import { CONFIG } from '../constants/index.js';
 
 export interface CreatePROptions {
   jira?: string;

@@ -1,10 +1,10 @@
 import axios, { AxiosInstance } from 'axios';
-import { JiraTicket } from './jira';
-import { GitChanges, FileChange } from './git';
-import { PullRequestTemplate } from './github';
-import { getConfig } from '../utils/config';
+import { JiraTicket } from './jira.js';
+import { GitChanges, FileChange } from './git.js';
+import { PullRequestTemplate } from './github.js';
+import { getConfig } from '../utils/config.js';
 import inquirer from 'inquirer';
-import { API_URLS, LIMITS, HEADERS, DEFAULT_MODELS } from '../constants';
+import { API_URLS, LIMITS, HEADERS, DEFAULT_MODELS } from '../constants/index.js';
 
 export interface GenerateDescriptionOptions {
   jiraTicket: JiraTicket;

@@ -1,5 +1,5 @@
-import { validateConfig, getConfigValue as getConfigValueFromConfig } from './config';
-import { REGEX_PATTERNS } from '../constants';
+import { validateConfig, getConfigValue as getConfigValueFromConfig } from './config.js';
+import { REGEX_PATTERNS } from '../constants/index.js';
 
 export function validateEnvironment(): void {
   if (!validateConfig()) {

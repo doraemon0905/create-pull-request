@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { CONFIG } from '../constants';
+import { CONFIG } from '../constants/index.js';
 
 export interface JiraConfig {
     baseUrl: string;
