@@ -88,7 +88,7 @@ class SimpleSpinner implements Spinner {
       this._clearLine();
       const frame = this._spinnerFrames[this._spinnerIndex];
       process.stdout.write(`${chalk.cyan(frame)} ${this._text}`);
-    } catch (error) {
+    } catch (_error) {
       // Silently handle write errors to prevent spinner from crashing
     }
   }
@@ -98,7 +98,7 @@ class SimpleSpinner implements Spinner {
       if (process.stdout.isTTY) {
         process.stdout.write('\r\x1b[K');
       }
-    } catch (error) {
+    } catch (_error) {
       // Silently handle write errors to prevent spinner from crashing
     }
   }
