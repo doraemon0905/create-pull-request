@@ -14,6 +14,13 @@ export interface JiraTicket {
   updated: string;
 }
 
+export interface CreateJiraTicketRequest {
+  summary: string;
+  description: string;
+  projectKey: string;
+  issueType?: string;
+}
+
 export class JiraService {
   private client: AxiosInstance;
 
@@ -80,6 +87,60 @@ export class JiraService {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  async createTicket(request: CreateJiraTicketRequest): Promise<{ key: string; url: string }> {
+    try {
+      const payload = {
+        fields: {
+          project: {
+            key: request.projectKey
+          },
+          summary: request.summary,
+          description: {
+            type: 'doc',
+            version: 1,
+            content: [
+              {
+                type: 'paragraph',
+                content: [
+                  {
+                    type: 'text',
+                    text: request.description
+                  }
+                ]
+              }
+            ]
+          },
+          issuetype: {
+            name: request.issueType || 'Task'
+          }
+        }
+      };
+
+      const response = await this.client.post('/issue', payload);
+      const issueKey = response.data.key;
+      const jiraConfig = getConfig('jira');
+      
+      // Remove trailing slash from baseUrl if present to avoid double slashes
+      const baseUrl = jiraConfig.baseUrl.replace(/\/$/, '');
+      const issueUrl = `${baseUrl}/browse/${issueKey}`;
+
+      return {
+        key: issueKey,
+        url: issueUrl
+      };
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === HTTP_STATUS.UNAUTHORIZED) {
+          throw new Error('Authentication failed. Please check your Jira credentials.');
+        } else if (error.response?.status === HTTP_STATUS.FORBIDDEN) {
+          throw new Error('Access denied. Please check your Jira permissions.');
+        }
+        throw new Error(`Jira API error: ${error.response?.data?.errorMessages?.[0] || error.message}`);
+      }
+      throw error;
     }
   }
 }

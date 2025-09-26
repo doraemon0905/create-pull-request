@@ -233,4 +233,144 @@ describe('JiraService', () => {
       );
     });
   });
+
+  describe('createTicket', () => {
+    const mockCreateRequest = {
+      summary: 'Test ticket summary',
+      description: 'Test ticket description',
+      projectKey: 'PROJ',
+      issueType: 'Task'
+    };
+
+    const mockCreateResponse = {
+      data: {
+        id: '12345',
+        key: 'PROJ-456',
+        self: 'https://company.atlassian.net/rest/api/3/issue/12345'
+      }
+    };
+
+    it('should create a ticket successfully', async () => {
+      mockAxiosInstance.post.mockResolvedValue(mockCreateResponse);
+
+      const result = await jiraService.createTicket(mockCreateRequest);
+
+      expect(result).toEqual({
+        key: 'PROJ-456',
+        url: 'https://company.atlassian.net/browse/PROJ-456'
+      });
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/issue', {
+        fields: {
+          project: {
+            key: 'PROJ'
+          },
+          summary: 'Test ticket summary',
+          description: {
+            type: 'doc',
+            version: 1,
+            content: [
+              {
+                type: 'paragraph',
+                content: [
+                  {
+                    type: 'text',
+                    text: 'Test ticket description'
+                  }
+                ]
+              }
+            ]
+          },
+          issuetype: {
+            name: 'Task'
+          }
+        }
+      });
+    });
+
+    it('should create a ticket with default issue type when not specified', async () => {
+      const requestWithoutIssueType = {
+        summary: 'Test ticket summary',
+        description: 'Test ticket description',
+        projectKey: 'PROJ'
+      };
+
+      mockAxiosInstance.post.mockResolvedValue(mockCreateResponse);
+
+      await jiraService.createTicket(requestWithoutIssueType);
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/issue', expect.objectContaining({
+        fields: expect.objectContaining({
+          issuetype: {
+            name: 'Task'
+          }
+        })
+      }));
+    });
+
+    it('should handle authentication errors when creating tickets', async () => {
+      const error = {
+        isAxiosError: true,
+        response: {
+          status: 401,
+          data: { errorMessages: ['Authentication failed'] }
+        },
+        message: 'Request failed'
+      };
+
+      (axios.isAxiosError as any).mockReturnValue(true);
+      mockAxiosInstance.post.mockRejectedValue(error);
+
+      await expect(jiraService.createTicket(mockCreateRequest)).rejects.toThrow(
+        'Authentication failed. Please check your Jira credentials.'
+      );
+    });
+
+    it('should handle permission errors when creating tickets', async () => {
+      const error = {
+        isAxiosError: true,
+        response: {
+          status: 403,
+          data: { errorMessages: ['Access denied'] }
+        },
+        message: 'Request failed'
+      };
+
+      (axios.isAxiosError as any).mockReturnValue(true);
+      mockAxiosInstance.post.mockRejectedValue(error);
+
+      await expect(jiraService.createTicket(mockCreateRequest)).rejects.toThrow(
+        'Access denied. Please check your Jira permissions.'
+      );
+    });
+
+    it('should handle API errors with specific error messages when creating tickets', async () => {
+      const error = {
+        isAxiosError: true,
+        response: {
+          status: 400,
+          data: {
+            errorMessages: ['Project does not exist']
+          }
+        },
+        message: 'Request failed'
+      };
+
+      (axios.isAxiosError as any).mockReturnValue(true);
+      mockAxiosInstance.post.mockRejectedValue(error);
+
+      await expect(jiraService.createTicket(mockCreateRequest)).rejects.toThrow(
+        'Jira API error: Project does not exist'
+      );
+    });
+
+    it('should handle network errors when creating tickets', async () => {
+      const error = new Error('Network timeout');
+      mockAxiosInstance.post.mockRejectedValue(error);
+
+      await expect(jiraService.createTicket(mockCreateRequest)).rejects.toThrow(
+        'Network timeout'
+      );
+    });
+  });
 });
