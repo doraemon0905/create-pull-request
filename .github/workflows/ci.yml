@@ -2,12 +2,12 @@ name: 🔍 CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
   schedule:
     # Run weekly security audits on Sundays at 2 AM UTC
-    - cron: '0 2 * * 0'
+    - cron: "0 2 * * 0"
 
 # Cancel previous runs when a new commit is pushed to the same branch or PR
 concurrency:
@@ -30,27 +30,27 @@ jobs:
           echo "Run ID: ${{ github.run_id }}"
           echo ""
           echo "✅ Security job proceeding (previous runs cancelled if any)"
-      
+
       - name: 🔍 Checkout code
         uses: actions/checkout@v4
-      
+
       - name: 🔧 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-      
+          node-version: "20"
+          cache: "npm"
+
       - name: 📦 Install dependencies
         run: npm ci
-      
+
       - name: 🔒 Run security audit
         run: npm audit --audit-level=moderate
-      
+
       - name: 🔍 Check for known vulnerabilities
         run: |
           echo "🔍 Checking for security vulnerabilities..."
           npm audit --audit-level=high --json > audit-results.json || true
-          
+
           # Check if there are high or critical vulnerabilities
           if [ -f "audit-results.json" ]; then
             HIGH_VULNS=$(cat audit-results.json | jq '.metadata.vulnerabilities.high // 0')
@@ -77,13 +77,13 @@ jobs:
     steps:
       - name: 🔍 Checkout code
         uses: actions/checkout@v4
-      
+
       - name: 🔧 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-      
+          node-version: "20"
+          cache: "npm"
+
       - name: 📦 Cache analysis results
         uses: actions/cache@v4
         with:
@@ -94,18 +94,18 @@ jobs:
           key: code-quality-${{ runner.os }}-${{ hashFiles('src/**/*', '.eslintrc.*', 'tsconfig.json') }}
           restore-keys: |
             code-quality-${{ runner.os }}-
-      
+
       - name: 📦 Install dependencies
         run: npm ci
-      
+
       - name: 📊 Code complexity analysis
         run: |
           echo "📊 Analyzing code complexity..."
-          
+
           # Simple complexity check using find and wc
           TOTAL_LINES=$(find src -name "*.ts" -exec wc -l {} + | tail -1 | awk '{print $1}')
           FILE_COUNT=$(find src -name "*.ts" | wc -l)
-          
+
           if [ "$FILE_COUNT" -gt 0 ]; then
             AVG_LINES=$((TOTAL_LINES / FILE_COUNT))
             echo "📈 Code statistics:"
@@ -119,11 +119,11 @@ jobs:
               echo "✅ File sizes look reasonable"
             fi
           fi
-      
+
       - name: 🔍 Dead code detection
         run: |
           echo "🔍 Checking for potential dead code..."
-          
+
           # Check for TODO/FIXME comments
           TODO_COUNT=$(find src -name "*.ts" -exec grep -l "TODO\|FIXME\|XXX" {} + | wc -l)
           if [ "$TODO_COUNT" -gt 0 ]; then
@@ -137,11 +137,11 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     needs: [security, code-quality]
-    
+
     strategy:
       matrix:
-        node-version: [18, 20, 22]  # Test multiple Node.js versions
-    
+        node-version: [18, 20, 22] # Test multiple Node.js versions
+
     steps:
       - name: Check if run was cancelled
         run: |
@@ -156,13 +156,13 @@ jobs:
           echo "✅ This run is proceeding (previous runs cancelled if any)"
       - name: 🔍 Checkout code
         uses: actions/checkout@v4
-      
+
       - name: 🔧 Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
-      
+          cache: "npm"
+
       - name: 📦 Cache build artifacts
         uses: actions/cache@v4
         with:
@@ -173,28 +173,28 @@ jobs:
           restore-keys: |
             build-${{ runner.os }}-node${{ matrix.node-version }}-
             build-${{ runner.os }}-
-      
+
       - name: 📦 Install dependencies
         run: npm ci
-      
+
       - name: 🔍 Check package integrity
         run: |
           # Verify package-lock.json is in sync
           npm ci --dry-run
-          
+
           # Check for security issues in dependencies
           npm audit --audit-level=moderate
-        continue-on-error: ${{ matrix.node-version != 20 }}  # Only fail on primary version
-      
+        continue-on-error: ${{ matrix.node-version != 20 }} # Only fail on primary version
+
       - name: 📝 Run ESLint
         run: npm run lint
-      
+
       - name: 🏗️ Build TypeScript
         run: npm run build
-      
+
       - name: 🧪 Run tests with coverage
         run: npm test -- --coverage --watchAll=false
-      
+
       - name: 📊 Upload coverage artifacts
         if: success()
         uses: actions/upload-artifact@v4
@@ -202,40 +202,40 @@ jobs:
           name: coverage-report-${{ matrix.node-version }}
           path: coverage/
           retention-days: 30
-      
+
       - name: 📊 Check build artifacts
         run: |
           echo "🔍 Checking build artifacts..."
-          
+
           # Verify main entry point exists
           if [ ! -f "lib/index.js" ]; then
             echo "❌ Main entry point missing!"
             exit 1
           fi
-          
+
           # Verify CLI binary exists and is executable
-          if [ ! -f "bin/create-pr" ]; then
+          if [ ! -f "bin/create-pr.js" ]; then
             echo "❌ CLI binary missing!"
             exit 1
           fi
-          
-          if [ ! -x "bin/create-pr" ]; then
+
+          if [ ! -x "bin/create-pr.js" ]; then
             echo "❌ CLI binary not executable!"
             exit 1
           fi
-          
+
           # Check TypeScript declarations
           if [ ! -f "lib/index.d.ts" ]; then
             echo "❌ TypeScript declarations missing!"
             exit 1
           fi
-          
+
           echo "✅ All build artifacts present and valid"
-      
+
       - name: 🔍 Package validation
         run: |
           echo "🔍 Validating package.json..."
-          
+
           # Check required fields
           node -e "
             const pkg = require('./package.json');
@@ -247,7 +247,7 @@ jobs:
             }
             console.log('✅ All required package.json fields present');
           "
-          
+
           # Validate semantic versioning
           node -e "
             const pkg = require('./package.json');
@@ -258,75 +258,75 @@ jobs:
             }
             console.log('✅ Version format valid:', pkg.version);
           "
-      
+
       - name: 🧪 Test CLI functionality (smoke test)
         run: |
           echo "🧪 Testing CLI functionality..."
-          
+
           # Make binary executable (in case git doesn't preserve it)
-          chmod +x bin/create-pr
-          
+          chmod +x bin/create-pr.js
+
           # Test help command
-          node bin/create-pr --help > /dev/null
+          node bin/create-pr.js --help > /dev/null
           if [ $? -eq 0 ]; then
             echo "✅ CLI help command works"
           else
             echo "❌ CLI help command failed"
             exit 1
           fi
-          
+
           # Test config command
-          node bin/create-pr config > /dev/null
+          node bin/create-pr.js config > /dev/null
           if [ $? -eq 0 ]; then
             echo "✅ CLI config command works"
           else
             echo "❌ CLI config command failed"
             exit 1
           fi
-      
+
       - name: 📦 Test packaging
-        if: matrix.node-version == 20  # Only test on primary version
+        if: matrix.node-version == 20 # Only test on primary version
         run: |
           echo "📦 Testing npm pack..."
-          
+
           # Create pack output in temp location
           PACK_OUTPUT=$(mktemp)
           npm pack --dry-run > "$PACK_OUTPUT" 2>&1
-          
+
           echo "📋 Package contents:"
           cat "$PACK_OUTPUT"
           echo ""
-          
+
           # Check if essential files are included
           if ! grep -q "lib/" "$PACK_OUTPUT"; then
             echo "❌ Build artifacts not included in package"
             cat "$PACK_OUTPUT"
             exit 1
           fi
-          
+
           if ! grep -q "bin/" "$PACK_OUTPUT"; then
             echo "❌ CLI binary not included in package"
             cat "$PACK_OUTPUT"
             exit 1
           fi
-          
+
           if ! grep -q "README.md" "$PACK_OUTPUT"; then
             echo "❌ README not included in package"
             cat "$PACK_OUTPUT"
             exit 1
           fi
-          
+
           echo "✅ Package contents validated"
-          
+
           # Check package size
           TARBALL=$(npm pack --silent)
           PACKAGE_SIZE=$(ls -la "$TARBALL" | awk '{print $5}')
           echo "📦 Package size: $PACKAGE_SIZE bytes"
-          
+
           # Clean up tarball
           rm -f "$TARBALL"
           rm -f "$PACK_OUTPUT"
-          
+
           # Warn if package is too large (>5MB)
           if [ "$PACKAGE_SIZE" -gt 5242880 ]; then
             echo "⚠️ Package size is quite large (>5MB)"
@@ -353,16 +353,16 @@ jobs:
           echo ""
           echo "✅ Compatibility job proceeding - all validation jobs passed successfully"
           echo "📋 Dependencies: security ✅, code-quality ✅, validate ✅"
-      
+
       - name: 🔍 Checkout code
         uses: actions/checkout@v4
-      
+
       - name: 🔧 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-      
+          node-version: "20"
+          cache: "npm"
+
       - name: 📦 Cache security tools
         uses: actions/cache@v4
         with:
@@ -373,26 +373,26 @@ jobs:
           key: security-tools-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             security-tools-${{ runner.os }}-
-      
+
       - name: 📦 Install dependencies
         run: npm ci
-      
+
       - name: 🔒 Security audit
         run: |
           echo "🔒 Running security audit..."
           npm audit --audit-level=moderate
-          
+
           # Generate audit report
           npm audit --json > audit-report.json || true
-          
+
           # Check for high/critical issues
           HIGH_ISSUES=$(cat audit-report.json | jq '.metadata.vulnerabilities.high // 0')
           CRITICAL_ISSUES=$(cat audit-report.json | jq '.metadata.vulnerabilities.critical // 0')
-          
+
           echo "Security summary:"
           echo "  High issues: $HIGH_ISSUES"
           echo "  Critical issues: $CRITICAL_ISSUES"
-          
+
           if [ "$CRITICAL_ISSUES" -gt 0 ]; then
             echo "❌ Critical security issues found!"
             exit 1
@@ -401,7 +401,7 @@ jobs:
           else
             echo "✅ No high or critical security issues"
           fi
-      
+
       - name: 🔍 License check
         run: |
           echo "🔍 Checking dependency licenses..."
@@ -413,17 +413,17 @@ jobs:
     runs-on: ubuntu-latest
     needs: [validate, security, code-quality, compatibility]
     if: always()
-    
+
     steps:
       - name: 🔍 Checkout code
         uses: actions/checkout@v4
-      
+
       - name: 🔧 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-      
+          node-version: "20"
+          cache: "npm"
+
       - name: 📦 Cache analysis results
         uses: actions/cache@v4
         with:
@@ -434,18 +434,18 @@ jobs:
           key: code-quality-${{ runner.os }}-${{ hashFiles('src/**/*', '.eslintrc.*', 'tsconfig.json') }}
           restore-keys: |
             code-quality-${{ runner.os }}-
-      
+
       - name: 📦 Install dependencies
         run: npm ci
-      
+
       - name: 📊 Code complexity analysis
         run: |
           echo "📊 Analyzing code complexity..."
-          
+
           # Simple complexity check using find and wc
           TOTAL_LINES=$(find src -name "*.ts" -exec wc -l {} + | tail -1 | awk '{print $1}')
           FILE_COUNT=$(find src -name "*.ts" | wc -l)
-          
+
           if [ "$FILE_COUNT" -gt 0 ]; then
             AVG_LINES=$((TOTAL_LINES / FILE_COUNT))
             echo "📈 Code statistics:"
@@ -459,11 +459,11 @@ jobs:
               echo "✅ File sizes look reasonable"
             fi
           fi
-      
+
       - name: 🔍 Dead code detection
         run: |
           echo "🔍 Checking for potential dead code..."
-          
+
           # Check for TODO/FIXME comments
           TODO_COUNT=$(find src -name "*.ts" -exec grep -l "TODO\|FIXME\|XXX" {} + | wc -l)
           if [ "$TODO_COUNT" -gt 0 ]; then
@@ -483,11 +483,11 @@ jobs:
       needs.code-quality.result == 'success' && 
       needs.compatibility.result == 'success' &&
       needs.report.result == 'success'
-    
+
     permissions:
       actions: write
       contents: read
-    
+
     steps:
       - name: 🚀 Trigger SonarCloud Analysis
         uses: actions/github-script@v7
@@ -496,11 +496,11 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const ref = context.ref;
-            
+
             // Determine the source branch and PR number for SonarCloud
             let sourceBranch;
             let prNumber = '';
-            
+
             if (ref.startsWith('refs/pull/')) {
               // For pull requests, we need to get the source branch from the PR
               // Since we're in a PR context, we can use the head ref
@@ -520,11 +520,11 @@ jobs:
               console.log(`🔍 Branch push detected, using branch: ${sourceBranch}`);
               console.log(`🔍 No PR number available for branch push`);
             }
-            
+
             console.log(`🚀 Triggering SonarCloud analysis for ${owner}/${repo}@${sourceBranch}`);
             console.log(`📊 All CI jobs completed successfully, including report job`);
             console.log(`🔍 Original ref: ${ref}, Source branch: ${sourceBranch}`);
-            
+
              // Method 3: Direct API call using fetch (similar to curl command)
                 console.log('🔍 Attempting direct API call to workflow file...');
                 console.log('🔑 Using GH_TOKEN from secrets');

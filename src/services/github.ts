@@ -1,7 +1,7 @@
 import { Octokit } from '@octokit/rest';
 import { simpleGit, SimpleGit } from 'simple-git';
-import { getConfig } from '../utils/config';
-import { FILE_PATHS, REGEX_PATTERNS, HEADERS, HTTP_STATUS, LIMITS, CONFIG } from '../constants';
+import { getConfig } from '../utils/config.js';
+import { FILE_PATHS, REGEX_PATTERNS, HEADERS, HTTP_STATUS, LIMITS, CONFIG } from '../constants/index.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
