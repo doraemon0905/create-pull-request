@@ -45,7 +45,7 @@ jobs:
             exit 1
           fi
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
       
       - name: 📝 Add comment about auto-merge
         if: success()
@@ -60,4 +60,4 @@ jobs:
           
           If you need to make changes or disable auto-merge, you can do so from the PR page."
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
