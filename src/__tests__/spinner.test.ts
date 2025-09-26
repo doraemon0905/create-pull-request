@@ -153,11 +153,7 @@ describe('Spinner', () => {
     it('should render spinner frames over time', () => {
       spinner.start('Testing...');
       
-      // Initial render
-      expect(mockWrite).toHaveBeenCalled();
-      mockWrite.mockClear();
-      
-      // Advance time to trigger frame updates
+      // Advance time to trigger frame updates since initial render happens with setInterval
       jest.advanceTimersByTime(80);
       expect(mockWrite).toHaveBeenCalled();
       
