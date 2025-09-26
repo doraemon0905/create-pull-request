@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 
-const fs = require('fs');
-const path = require('path');
-const { execSync } = require('child_process');
-const chalk = require('chalk');
+import fs from 'fs';
+import path from 'path';
+import { execSync } from 'child_process';
+import chalk from 'chalk';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const LIB_DIR = path.join(__dirname, '..', 'lib');
 const SRC_DIR = path.join(__dirname, '..', 'src');
@@ -237,8 +241,8 @@ function formatBytes(bytes) {
 }
 
 // Run the build if called directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   optimizedBuild();
 }
 
-module.exports = { optimizedBuild };
+export { optimizedBuild };
