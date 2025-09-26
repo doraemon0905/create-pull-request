@@ -1,5 +1,6 @@
-import { validateConfig, getConfigValue as getConfigValueFromConfig } from './config';
-import { REGEX_PATTERNS } from '../constants';
+import { validateConfig, getConfigValue as getConfigValueFromConfig } from './config.js';
+import { REGEX_PATTERNS } from '../constants/index.js';
+import { execSync } from 'node:child_process';
 
 export function validateEnvironment(): void {
   if (!validateConfig()) {
@@ -50,8 +51,6 @@ export function extractJiraTicketFromBranch(branchName: string): string | null {
 }
 
 export function validateGitRepository(): void {
-  const { execSync } = require('node:child_process');
-
   try {
     execSync('git rev-parse --is-inside-work-tree', { stdio: 'ignore' });
   } catch {

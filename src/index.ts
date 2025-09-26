@@ -3,11 +3,11 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { config } from 'dotenv';
-import { createPullRequest } from './commands/create-pr';
-import { validateEnvironment } from './utils/validation';
+import { createPullRequest } from './commands/create-pr.js';
+import { validateEnvironment } from './utils/validation.js';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import { CONFIG } from './constants';
+import { CONFIG } from './constants/index.js';
 
 config();
 
