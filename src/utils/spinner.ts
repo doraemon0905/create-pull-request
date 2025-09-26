@@ -38,6 +38,7 @@ class SimpleSpinner implements Spinner {
     
     if (!this._isSpinning) {
       this._isSpinning = true;
+      this._render(); // Initial render
       this._startSpinning();
     }
     
