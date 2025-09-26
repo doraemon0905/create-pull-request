@@ -38,6 +38,7 @@ class SimpleSpinner implements Spinner {
     
     if (!this._isSpinning) {
       this._isSpinning = true;
+      this._render(); // Initial render
       this._startSpinning();
     }
     
@@ -84,14 +85,22 @@ class SimpleSpinner implements Spinner {
   private _render(): void {
     if (!this._isSpinning) return;
     
-    this._clearLine();
-    const frame = this._spinnerFrames[this._spinnerIndex];
-    process.stdout.write(`${chalk.cyan(frame)} ${this._text}`);
+    try {
+      this._clearLine();
+      const frame = this._spinnerFrames[this._spinnerIndex];
+      process.stdout.write(`${chalk.cyan(frame)} ${this._text}`);
+    } catch (error) {
+      // Silently handle write errors to prevent crashes
+    }
   }
 
   private _clearLine(): void {
-    if (process.stdout.isTTY) {
-      process.stdout.write('\r\x1b[K');
+    try {
+      if (process.stdout.isTTY) {
+        process.stdout.write('\r\x1b[K');
+      }
+    } catch (error) {
+      // Silently handle write errors to prevent crashes
     }
   }
 }
