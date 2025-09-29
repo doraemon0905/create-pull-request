@@ -12,6 +12,11 @@ export interface JiraTicket {
   reporter: string;
   created: string;
   updated: string;
+  parentTicket?: {
+    key: string;
+    summary: string;
+    issueType: string;
+  } | null;
 }
 
 export class JiraService {
@@ -41,12 +46,37 @@ export class JiraService {
     try {
       const response = await this.client.get(`${JIRA_ENDPOINTS.ISSUE}${ticketKey}`, {
         params: {
-          fields: 'summary,description,issuetype,status,assignee,reporter,created,updated'
+          fields: 'summary,description,issuetype,status,assignee,reporter,created,updated,parent'
         }
       });
 
       const issue = response.data;
       const fields = issue.fields;
+
+      // Handle parent ticket information if it exists and is not an Epic
+      let parentTicket = null;
+      if (fields.parent && fields.issuetype.name.toLowerCase() !== 'epic') {
+        try {
+          // Fetch parent ticket details
+          const parentResponse = await this.client.get(`${JIRA_ENDPOINTS.ISSUE}${fields.parent.key}`, {
+            params: {
+              fields: 'summary,issuetype'
+            }
+          });
+          const parentFields = parentResponse.data.fields;
+          // Only include parent ticket if it has meaningful content
+          if (parentFields.summary && parentFields.summary.trim()) {
+            parentTicket = {
+              key: fields.parent.key,
+              summary: parentFields.summary.trim(),
+              issueType: parentFields.issuetype.name
+            };
+          }
+        } catch (parentError) {
+          // If parent ticket fetch fails, log it but don't fail the main request
+          console.warn(`Warning: Could not fetch parent ticket ${fields.parent.key}:`, parentError instanceof Error ? parentError.message : 'Unknown error');
+        }
+      }
 
       return {
         key: issue.key,
@@ -57,7 +87,8 @@ export class JiraService {
         assignee: fields.assignee?.displayName || null,
         reporter: fields.reporter.displayName,
         created: fields.created,
-        updated: fields.updated
+        updated: fields.updated,
+        parentTicket
       };
     } catch (error) {
       if (axios.isAxiosError(error)) {

@@ -22,7 +22,8 @@ describe('AIDescriptionGeneratorService', () => {
       assignee: 'John Doe',
       reporter: 'Jane Doe',
       created: '2023-01-01T00:00:00.000Z',
-      updated: '2023-01-02T00:00:00.000Z'
+      updated: '2023-01-02T00:00:00.000Z',
+      parentTicket: null
     },
     gitChanges: {
       totalFiles: 2,
@@ -158,6 +159,58 @@ describe('AIDescriptionGeneratorService', () => {
       mockAxiosInstance.post.mockRejectedValue(new Error('API error'));
 
       await expect(service.generatePRDescription(mockOptions)).rejects.toThrow('API error');
+    });
+
+    it('should include parent ticket context in PR description when parent ticket exists', async () => {
+      const mockOptionsWithParent: GenerateDescriptionOptions = {
+        ...mockOptions,
+        jiraTicket: {
+          ...mockOptions.jiraTicket,
+          parentTicket: {
+            key: 'PROJ-100',
+            summary: 'Epic: User Authentication System',
+            issueType: 'Epic'
+          }
+        }
+      };
+
+      const mockResponse = {
+        content: [{
+          text: '{"title": "PROJ-123: Test feature implementation", "body": "## Summary\\nImplemented new test feature as part of PROJ-100: Epic: User Authentication System"}'
+        }]
+      };
+      mockAxiosInstance.post.mockResolvedValue({ data: mockResponse });
+
+      const result = await service.generatePRDescription(mockOptionsWithParent);
+
+      expect(result.title).toBe('PROJ-123: Test feature implementation');
+      expect(result.body).toContain('PROJ-100: Epic: User Authentication System');
+
+      // Verify that the API was called with parent ticket context
+      const apiCall = mockAxiosInstance.post.mock.calls[0];
+      const promptContent = apiCall[1].messages[0].content;
+      expect(promptContent).toContain('Parent Ticket Context');
+      expect(promptContent).toContain('PROJ-100');
+      expect(promptContent).toContain('Epic: User Authentication System');
+    });
+
+    it('should not include parent ticket context when no parent ticket exists', async () => {
+      const mockResponse = {
+        content: [{
+          text: '{"title": "PROJ-123: Test feature implementation", "body": "## Summary\\nImplemented new test feature"}'
+        }]
+      };
+      mockAxiosInstance.post.mockResolvedValue({ data: mockResponse });
+
+      const result = await service.generatePRDescription(mockOptions);
+
+      expect(result.title).toBe('PROJ-123: Test feature implementation');
+
+      // Verify that the API was called without parent ticket context
+      const apiCall = mockAxiosInstance.post.mock.calls[0];
+      const promptContent = apiCall[1].messages[0].content;
+      expect(promptContent).not.toContain('Parent Ticket Context');
+      expect(promptContent).not.toContain('PROJ-100');
     });
 
   });

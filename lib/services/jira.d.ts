@@ -8,6 +8,11 @@ export interface JiraTicket {
     reporter: string;
     created: string;
     updated: string;
+    parentTicket?: {
+        key: string;
+        summary: string;
+        issueType: string;
+    } | null;
 }
 export declare class JiraService {
     private client;
