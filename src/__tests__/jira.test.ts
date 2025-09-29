@@ -103,12 +103,13 @@ describe('JiraService', () => {
         assignee: 'John Doe',
         reporter: 'Jane Doe',
         created: '2023-01-01T00:00:00.000Z',
-        updated: '2023-01-02T00:00:00.000Z'
+        updated: '2023-01-02T00:00:00.000Z',
+        parentTicket: null
       });
 
       expect(mockAxiosInstance.get).toHaveBeenCalledWith('/issue/PROJ-123', {
         params: {
-          fields: 'summary,description,issuetype,status,assignee,reporter,created,updated'
+          fields: 'summary,description,issuetype,status,assignee,reporter,created,updated,parent'
         }
       });
     });
@@ -130,6 +131,128 @@ describe('JiraService', () => {
       const result = await jiraService.getTicket('PROJ-123');
 
       expect(result.assignee).toBeNull();
+    });
+
+    it('should fetch parent ticket information when available', async () => {
+      const responseWithParent = {
+        ...mockTicketResponse,
+        data: {
+          ...mockTicketResponse.data,
+          fields: {
+            ...mockTicketResponse.data.fields,
+            issuetype: { name: 'Sub-task' },
+            parent: { key: 'PROJ-100' }
+          }
+        }
+      };
+
+      const parentTicketResponse = {
+        data: {
+          fields: {
+            summary: 'Parent ticket summary',
+            issuetype: { name: 'Story' }
+          }
+        }
+      };
+
+      mockAxiosInstance.get
+        .mockResolvedValueOnce(responseWithParent)
+        .mockResolvedValueOnce(parentTicketResponse);
+
+      const result = await jiraService.getTicket('PROJ-123');
+
+      expect(result.parentTicket).toEqual({
+        key: 'PROJ-100',
+        summary: 'Parent ticket summary',
+        issueType: 'Story'
+      });
+
+      expect(mockAxiosInstance.get).toHaveBeenCalledTimes(2);
+      expect(mockAxiosInstance.get).toHaveBeenNthCalledWith(2, '/issue/PROJ-100', {
+        params: {
+          fields: 'summary,issuetype'
+        }
+      });
+    });
+
+    it('should not fetch parent for Epic tickets', async () => {
+      const epicResponse = {
+        ...mockTicketResponse,
+        data: {
+          ...mockTicketResponse.data,
+          fields: {
+            ...mockTicketResponse.data.fields,
+            issuetype: { name: 'Epic' },
+            parent: { key: 'PROJ-100' }
+          }
+        }
+      };
+
+      mockAxiosInstance.get.mockResolvedValue(epicResponse);
+
+      const result = await jiraService.getTicket('PROJ-123');
+
+      expect(result.parentTicket).toBeNull();
+      expect(mockAxiosInstance.get).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle missing parent ticket gracefully', async () => {
+      const responseWithParent = {
+        ...mockTicketResponse,
+        data: {
+          ...mockTicketResponse.data,
+          fields: {
+            ...mockTicketResponse.data.fields,
+            issuetype: { name: 'Sub-task' },
+            parent: { key: 'PROJ-100' }
+          }
+        }
+      };
+
+      const parentError = {
+        isAxiosError: true,
+        response: { status: 404 },
+        message: 'Parent not found'
+      };
+
+      mockAxiosInstance.get
+        .mockResolvedValueOnce(responseWithParent)
+        .mockRejectedValueOnce(parentError);
+
+      const result = await jiraService.getTicket('PROJ-123');
+
+      expect(result.parentTicket).toBeNull();
+    });
+
+    it('should handle empty parent ticket summary', async () => {
+      const responseWithParent = {
+        ...mockTicketResponse,
+        data: {
+          ...mockTicketResponse.data,
+          fields: {
+            ...mockTicketResponse.data.fields,
+            issuetype: { name: 'Sub-task' },
+            parent: { key: 'PROJ-100' }
+          }
+        }
+      };
+
+      const parentTicketResponse = {
+        data: {
+          fields: {
+            summary: '',
+            issuetype: { name: 'Story' }
+          }
+        }
+      };
+
+      mockAxiosInstance.get
+        .mockResolvedValueOnce(responseWithParent)
+        .mockResolvedValueOnce(parentTicketResponse);
+
+      const result = await jiraService.getTicket('PROJ-123');
+
+      expect(result.parentTicket).toBeNull();
     });
 
     it('should handle API errors with specific error messages', async () => {

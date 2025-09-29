@@ -188,6 +188,15 @@ export class AIDescriptionGeneratorService {
       summaryPrompt += `- Description: ${jiraTicket.description.substring(0, LIMITS.MAX_DESCRIPTION_PREVIEW_LENGTH)}${jiraTicket.description.length > LIMITS.MAX_DESCRIPTION_PREVIEW_LENGTH ? '...' : ''}\n`;
     }
 
+    // Parent ticket information if available
+    if (jiraTicket.parentTicket) {
+      summaryPrompt += `\n## Parent Ticket Context:\n`;
+      summaryPrompt += `- Parent Key: ${jiraTicket.parentTicket.key}\n`;
+      summaryPrompt += `- Parent Summary: ${jiraTicket.parentTicket.summary}\n`;
+      summaryPrompt += `- Parent Type: ${jiraTicket.parentTicket.issueType}\n`;
+      summaryPrompt += `- Context: This ticket is a subtask/child of the parent ticket above. Please consider the parent ticket's context when generating the summary.\n`;
+    }
+
     // PR Template context if available
     if (template) {
       summaryPrompt += `\n## PR Template Context:\n`;
@@ -275,11 +284,17 @@ export class AIDescriptionGeneratorService {
     summaryPrompt += `Please provide a HIGHLY DETAILED and comprehensive summary that:\n`;
     summaryPrompt += `1. ALWAYS starts with relevant ticket URLs at the very top if available:\n`;
     summaryPrompt += `   - Jira ticket URL in format: [${jiraTicket.key}](JIRA_BASE_URL/browse/${jiraTicket.key})\n`;
+    if (jiraTicket.parentTicket) {
+      summaryPrompt += `   - Parent ticket URL in format: [${jiraTicket.parentTicket.key}](JIRA_BASE_URL/browse/${jiraTicket.parentTicket.key})\n`;
+    }
     summaryPrompt += `   - Any Sentry error URLs mentioned in the ticket description\n`;
     summaryPrompt += `   - Other relevant tracking URLs\n`;
     summaryPrompt += `2. Provides a detailed overview (6-8 sentences) explaining:\n`;
     summaryPrompt += `   - What specific feature/change is being implemented\n`;
     summaryPrompt += `   - How it directly addresses EACH requirement in the JIRA ticket description\n`;
+    if (jiraTicket.parentTicket) {
+      summaryPrompt += `   - How this change contributes to the overall parent ticket (${jiraTicket.parentTicket.key}: ${jiraTicket.parentTicket.summary}) goals\n`;
+    }
     summaryPrompt += `   - The technical approach and architecture decisions made\n`;
     summaryPrompt += `   - The specific problem this solves from the ticket description\n`;
     summaryPrompt += `   - The impact on the system, users, and related components\n`;
@@ -393,6 +408,16 @@ export class AIDescriptionGeneratorService {
     if (jiraTicket.description) {
       prompt += `- Full Description: ${jiraTicket.description}\n`;
       prompt += `- IMPORTANT: Analyze how the code changes relate to and fulfill the requirements described in this JIRA ticket description.\n`;
+    }
+
+    // Parent ticket context if available
+    if (jiraTicket.parentTicket) {
+      prompt += `\n## Parent Ticket Context:\n`;
+      prompt += `- Parent Ticket: ${jiraTicket.parentTicket.key}\n`;
+      prompt += `- Parent Title: ${jiraTicket.parentTicket.summary}\n`;
+      prompt += `- Parent Type: ${jiraTicket.parentTicket.issueType}\n`;
+      prompt += `- IMPORTANT: This ticket is part of a larger effort described by the parent ticket. Consider how this specific implementation contributes to the overall parent ticket goals.\n`;
+      prompt += `- When generating the PR description, include context about how this change fits into the broader parent ticket scope.\n`;
     }
     prompt += `\n`;
 
