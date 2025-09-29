@@ -12,12 +12,12 @@ jobs:
     # Only run when PR is merged or direct push to main, but skip if it's an auto version update PR or dependabot PR
     if: (github.event_name == 'push') || (github.event.pull_request.merged == true && !contains(github.event.pull_request.title, 'Auto version update') && github.event.pull_request.user.login != 'dependabot[bot]')
     runs-on: ubuntu-latest
-    
+
     permissions:
-      contents: write  # Needed to push version tags and commits
-      pull-requests: write  # Needed to create pull requests
-      issues: write  # Needed to create pull requests
-    
+      contents: write # Needed to push version tags and commits
+      pull-requests: write # Needed to create pull requests
+      issues: write # Needed to create pull requests
+
     steps:
       - name: 🔍 Checkout code
         uses: actions/checkout@v4
@@ -26,21 +26,21 @@ jobs:
           fetch-depth: 0
           # Use GitHub token with write permissions
           token: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: 🔧 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-      
+          node-version: "20"
+          cache: "npm"
+
       - name: 📦 Install dependencies
         run: npm ci
-      
+
       - name: 🔍 Configure Git
         run: |
           git config user.name "Bradley Nguyen"
           git config user.email "nguyentruonggiang91@gmail.com"
-      
+
       - name: 📋 Get PR Information
         id: pr-info
         if: github.event_name == 'pull_request'
@@ -49,18 +49,18 @@ jobs:
           echo "pr_title=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
           echo "pr_labels=$(echo '${{ toJson(github.event.pull_request.labels.*.name) }}' | jq -r 'join(" ")')" >> $GITHUB_OUTPUT
           echo "pr_merged=${{ github.event.pull_request.merged }}" >> $GITHUB_OUTPUT
-      
+
       - name: 🏷️ Run auto version update
         id: version-update
         run: |
           echo "🏷️ Running auto version update script..."
-          
+
           # Set environment variables for the script
           export GITHUB_TOKEN="${{ secrets.GH_TOKEN }}"
           export CI=true
           export GITHUB_ACTIONS=true
           export GITHUB_ACTOR="${{ github.actor }}"
-          
+
           # Run the auto version script
           if ./scripts/auto-version.sh; then
             echo "version_updated=true" >> $GITHUB_OUTPUT
@@ -71,21 +71,21 @@ jobs:
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: 🔀 Create version update branch
         if: steps.version-update.outputs.version_updated == 'true'
         run: |
           echo "🔀 Creating version update branch..."
-          
+
           # Create a new branch for the version update
           BRANCH_NAME="auto-version-update-$(date +%Y%m%d-%H%M%S)"
           git checkout -b "$BRANCH_NAME"
           echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
-          
+
           # Push the branch
           git push origin "$BRANCH_NAME"
           echo "✅ Created and pushed branch $BRANCH_NAME"
-      
+
       - name: 📋 Create Pull Request
         if: steps.version-update.outputs.version_updated == 'true'
         uses: actions/github-script@v7
@@ -122,38 +122,32 @@ jobs:
               ---
               🤖 Generated automatically by the auto-version workflow`
             });
-            
+
             console.log(`✅ Created pull request #${pullRequest.number}`);
             console.log(`🔗 PR URL: ${pullRequest.html_url}`);
-            
-            // Auto-merge the PR if it's a patch version
-            if (process.env.VERSION_TYPE === 'patch') {
-              try {
-                // Wait a moment for the PR to be fully created
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                
-                await github.rest.pulls.merge({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_request_number: pullRequest.number,
-                  commit_title: `🏷️ Auto merge version update to v${process.env.NEW_VERSION}`,
-                  merge_method: 'squash'
-                });
-                console.log(`✅ Auto-merged PR #${pullRequest.number} (patch version)`);
-              } catch (error) {
-                console.log(`ℹ️ Could not auto-merge PR: ${error.message}`);
-                if (error.response) {
-                  console.log(`📊 Response status: ${error.response.status}`);
-                  console.log(`📊 Response data: ${JSON.stringify(error.response.data, null, 2)}`);
-                }
-                console.log(`📋 Please manually review and merge PR #${pullRequest.number}`);
-              }
-            } else {
-              console.log(`📋 Manual review required for ${process.env.VERSION_TYPE} version bump`);
-              console.log(`🔗 Please review and merge: ${pullRequest.html_url}`);
+
+            // Enable auto-merge option for the PR
+            try {
+              // Wait a moment for the PR to be fully created
+              await new Promise(resolve => setTimeout(resolve, 3000));
+              
+              // Enable auto-merge with squash method
+              await github.rest.pulls.enableAutoMerge({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_request_number: pullRequest.number,
+                merge_method: 'squash'
+              });
+              
+              console.log(`✅ Auto-merge enabled for PR #${pullRequest.number} with squash method`);
+              console.log(`🔀 PR will be automatically merged when all checks pass`);
+              
+            } catch (error) {
+              console.log(`ℹ️ Could not enable auto-merge: ${error.message}`);
+              console.log(`📋 Please manually review and merge PR #${pullRequest.number}`);
+              console.log(`🔗 PR URL: ${pullRequest.html_url}`);
             }
-      
-      
+
       - name: 📊 Version Update Summary
         if: always()
         run: |
@@ -161,15 +155,15 @@ jobs:
           echo "========================"
           echo "Event: ${{ github.event_name }}"
           echo "Branch: ${{ github.ref_name }}"
-          
+
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "PR Number: ${{ github.event.number }}"
             echo "PR Title: ${{ github.event.pull_request.title }}"
             echo "PR Merged: ${{ github.event.pull_request.merged }}"
           fi
-          
+
           echo "Version Updated: ${{ steps.version-update.outputs.version_updated }}"
-          
+
           if [ -n "$OLD_VERSION" ] && [ -n "$NEW_VERSION" ]; then
             echo "Old Version: $OLD_VERSION"
             echo "New Version: $NEW_VERSION"
@@ -186,30 +180,30 @@ jobs:
   post-merge-release:
     if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && contains(github.event.pull_request.title, 'Auto version update') && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
-    
+
     permissions:
       contents: write
-      
+
     steps:
       - name: 🔍 Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
+
       - name: 📋 Extract version from package.json
         id: get-version
         run: |
           VERSION=$(node -p "require('./package.json').version")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "📦 Current version: $VERSION"
-      
+
       - name: 🏷️ Create Git Tag
         run: |
           git config user.name "Bradley Nguyen"
           git config user.email "nguyentruonggiang91@gmail.com"
-          
+
           TAG_NAME="v${{ steps.get-version.outputs.version }}"
-          
+
           # Check if tag already exists
           if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
             echo "⚠️ Tag $TAG_NAME already exists, skipping tag creation"
@@ -218,7 +212,7 @@ jobs:
             git push origin "$TAG_NAME"
             echo "✅ Created and pushed tag $TAG_NAME"
           fi
-      
+
       - name: 🏷️ Create GitHub Release
         uses: actions/create-release@v1
         env:
@@ -228,22 +222,22 @@ jobs:
           release_name: Release v${{ steps.get-version.outputs.version }}
           body: |
             ## 🚀 Auto Release v${{ steps.get-version.outputs.version }}
-            
+
             This release was automatically created when version update PR was merged to main.
-            
+
             ### What's Changed
             - Merged PR #${{ github.event.number }}: ${{ github.event.pull_request.title }}
-            
+
             ### Installation
             ```bash
             npm install -g publish-pull-request@${{ steps.get-version.outputs.version }}
             ```
-            
+
             ### Usage
             ```bash
             create-pr create --jira YOUR-123
             ```
-            
+
             For full documentation, see [README.md](https://github.com/${{ github.repository }}/blob/main/README.md)
           draft: false
           prerelease: ${{ contains(steps.get-version.outputs.version, '-') }}
@@ -253,14 +247,14 @@ jobs:
     needs: post-merge-release
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && contains(github.event.pull_request.title, 'Auto version update') && github.event.pull_request.user.login != 'dependabot[bot]'
-    
+
     steps:
       - name: 🚀 Trigger Publish Workflow
         run: |
           echo "🚀 Version was updated, consider triggering publish workflow"
           echo "💡 You can manually trigger the publish workflow from the Actions tab"
           echo "📦 Or set up automatic publishing by uncommenting the workflow_dispatch below"
-          
+
           # Uncomment the following lines to automatically trigger publish after version update
           curl -X POST \
             -H "Accept: application/vnd.github.v3+json" \
