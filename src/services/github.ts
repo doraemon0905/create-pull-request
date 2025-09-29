@@ -101,7 +101,7 @@ export class GitHubService {
       }
 
       const files = fs.readdirSync(templateDir);
-      const markdownFiles = files.filter(file => file.endsWith('.md'));
+      const markdownFiles = files.filter(file => file.toLowerCase().endsWith('.md'));
 
       for (const file of markdownFiles) {
         const filePath = path.join(templateDir, file);
