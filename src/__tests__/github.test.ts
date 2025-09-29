@@ -295,11 +295,11 @@ describe('GitHubService', () => {
 
       // Mock file system to return template exists and content
       jest.mocked(mockedFs.existsSync).mockImplementation((path: any) => {
-        return path === '.github/pull_request_template.md';
+        return path === '.github/PULL_REQUEST_TEMPLATE.md';
       });
 
       jest.mocked(mockedFs.readFileSync).mockImplementation((path: any) => {
-        if (path === '.github/pull_request_template.md') {
+        if (path === '.github/PULL_REQUEST_TEMPLATE.md') {
           return mockContent;
         }
         throw new Error('File not found');
@@ -309,7 +309,7 @@ describe('GitHubService', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual({
-        name: 'pull_request_template.md',
+        name: 'PULL_REQUEST_TEMPLATE.md',
         content: mockContent
       });
     });

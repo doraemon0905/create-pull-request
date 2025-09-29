@@ -38,7 +38,7 @@ export declare const CONFIG: {
     readonly CLI_VERSION: string;
 };
 export declare const FILE_PATHS: {
-    readonly PR_TEMPLATE_PATHS: readonly [".github/pull_request_template.md", ".github/PULL_REQUEST_TEMPLATE.md", "pull_request_template.md", "PULL_REQUEST_TEMPLATE.md", ".github/PULL_REQUEST_TEMPLATE/default.md"];
+    readonly PR_TEMPLATE_PATHS: readonly [".github/PULL_REQUEST_TEMPLATE.md", "PULL_REQUEST_TEMPLATE.md", ".github/PULL_REQUEST_TEMPLATE/default.md"];
 };
 export declare const REGEX_PATTERNS: {
     readonly JIRA_TICKET: RegExp;
