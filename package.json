@@ -40,7 +40,7 @@
   "license": "MIT",
   "dependencies": {
     "@octokit/rest": "^22.0.0",
-    "@octokit/types": "^12.6.0",
+    "@octokit/types": "^15.0.0",
     "axios": "^1.5.0",
     "chalk": "^5.6.2",
     "commander": "^14.0.0",
