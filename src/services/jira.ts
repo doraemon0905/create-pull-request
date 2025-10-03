@@ -173,7 +173,7 @@ export class JiraService {
         link.object?.url && 
         (link.object.url.includes('confluence') || link.object.url.includes('wiki'))
       );
-    } catch (error) {
+    } catch (_error) {
       return false;
     }
   }
@@ -240,7 +240,7 @@ export class JiraService {
     try {
       // Extract page ID from URL (typical format: /pages/viewpage.action?pageId=123456)
       const pageIdMatch = pageUrl.match(/pageId=(\d+)/);
-      const spaceKeyPageTitleMatch = pageUrl.match(/\/spaces\/([^\/]+)\/pages\/\d+\/([^\/\?]+)/);
+      const spaceKeyPageTitleMatch = pageUrl.match(/\/spaces\/([^/]+)\/pages\/\d+\/([^/?]+)/);
       
       let pageId: string | null = null;
       
