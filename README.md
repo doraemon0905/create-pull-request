@@ -5,6 +5,7 @@ A CLI tool that automatically generates pull request descriptions based on Jira 
 ## Features
 
 - 🎫 **Jira Integration**: Automatically fetches ticket information from Jira
+- 📄 **Confluence Integration**: Optionally includes linked Confluence pages in PR description generation
 - 🔄 **Git Analysis**: Analyzes file changes and commit history
 - 🤖 **AI-Powered**: Uses your selected AI provider (Claude, ChatGPT, Gemini, or Copilot) to generate intelligent PR descriptions
 - 📋 **Template Support**: Automatically detects and uses PR templates from your repository
@@ -139,12 +140,79 @@ create-pr create --jira PROJ-123 --dry-run
 
 1. **Validation**: Checks that you're in a git repository and have proper configuration
 2. **Jira Integration**: Fetches ticket details including summary, description, and metadata
-3. **Git Analysis**: Analyzes file changes, commit messages, and diff content
-4. **Template Detection**: Looks for PR templates in your repository
-5. **AI Provider Selection**: Uses the configured AI provider or prompts you to select one if multiple are available
-6. **AI Generation**: Uses the selected AI provider to generate intelligent descriptions
-7. **User Review**: Shows generated content and asks for confirmation
-8. **PR Creation**: Creates the pull request on GitHub
+3. **Confluence Check**: Detects linked Confluence pages and asks if you want to include them
+4. **Git Analysis**: Analyzes file changes, commit messages, and diff content
+5. **Template Detection**: Looks for PR templates in your repository
+6. **AI Provider Selection**: Uses the configured AI provider or prompts you to select one if multiple are available
+7. **AI Generation**: Uses the selected AI provider to generate intelligent descriptions
+8. **User Review**: Shows generated content and asks for confirmation
+9. **PR Creation**: Creates the pull request on GitHub
+
+## Confluence Integration
+
+When a Jira ticket has linked Confluence pages, the tool will ask if you want to include their content in the PR description generation:
+
+```
+✔ Jira ticket information fetched
+🎫 Using Jira ticket: PROJ-123 - Implement user authentication
+
+⠋ Checking for linked Confluence pages...
+✔ Found linked Confluence pages
+? Include Confluence page content in PR summary generation? (y/N)
+```
+
+### Benefits
+
+- **Enhanced Context**: AI uses documented requirements and specifications from Confluence
+- **Better Alignment**: Generated descriptions reference relevant documentation
+- **Smarter Summaries**: AI can cross-reference code changes with documented requirements
+- **User Control**: You decide whether to include Confluence content (defaults to No)
+
+### How It Works
+
+1. **Detection**: Automatically detects Confluence pages linked to your Jira ticket
+2. **User Prompt**: Asks for confirmation before fetching (defaults to No for faster workflow)
+3. **Content Extraction**: If confirmed, fetches and processes Confluence page content
+4. **Smart Compression**: Automatically compresses content to optimize AI prompts
+5. **AI Integration**: AI uses both Jira and Confluence context to generate better descriptions
+
+### Supported Confluence URLs
+
+- Old-style: `/pages/viewpage.action?pageId=123456`
+- New-style: `/spaces/SPACE/pages/123456/Page+Title`
+- Wiki URLs: Automatically detected
+
+### Configuration
+
+No additional configuration needed! Confluence integration uses your existing Jira credentials:
+
+- Same authentication as Jira
+- No extra API tokens required
+- Automatic client initialization
+
+### Content Processing
+
+- **HTML Stripping**: Removes HTML tags while preserving text content
+- **Smart Compression**: Limits content to 2000 characters per page
+- **Intelligent Truncation**: Breaks at sentence boundaries for better readability
+- **Page Limit**: Maximum 5 Confluence pages per ticket
+
+### Example with Confluence
+
+```
+✔ Found linked Confluence pages
+? Include Confluence page content in PR summary generation? Yes
+⠋ Fetching Confluence pages content...
+✔ Loaded 2 Confluence page(s)
+📄 Confluence pages found:
+   • Authentication Requirements
+   • API Security Guidelines
+
+⠋ Analyzing repository and changes...
+✔ Repository: company/awesome-app, Branch: feature/auth-implementation
+```
+
+The AI will then generate a PR description that references and aligns with the documented requirements from these Confluence pages.
 
 ## AI Provider Options
 
@@ -193,8 +261,20 @@ The tool automatically detects PR templates from these locations:
 ```
 🚀 Starting pull request creation process...
 
-✅ Fetched Jira ticket: PROJ-123 - Implement user authentication
-✅ Repository: company/awesome-app, Branch: feature/auth-implementation
+✔ Jira ticket information fetched
+🎫 Using Jira ticket: PROJ-123 - Implement user authentication
+
+⠋ Checking for linked Confluence pages...
+✔ Found linked Confluence pages
+? Include Confluence page content in PR summary generation? Yes
+⠋ Fetching Confluence pages content...
+✔ Loaded 2 Confluence page(s)
+📄 Confluence pages found:
+   • Authentication Requirements
+   • API Security Guidelines
+
+⠋ Analyzing repository and changes...
+✔ Repository: company/awesome-app, Branch: feature/auth-implementation
 
 📊 Changes Summary:
    Files changed: 8
@@ -210,7 +290,9 @@ Title: PROJ-123: Implement user authentication
 
 Description:
 ## Summary
-This PR implements user authentication functionality as specified in PROJ-123...
+This PR implements user authentication functionality as specified in PROJ-123,
+following the requirements documented in the Authentication Requirements and
+API Security Guidelines Confluence pages...
 
 ? What would you like to do? 
 ❯ ✅ Create the pull request
@@ -236,6 +318,7 @@ Title: PROJ-123: Implement user authentication
   - **OpenAI API key** (alternative) - Reliable option
   - **Google Gemini API key** (alternative) - Good option
   - **GitHub Copilot API token** (legacy) - May have availability issues
+- Optional: Confluence pages linked to Jira tickets (uses same Jira credentials)
 
 ## Development
 

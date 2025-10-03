@@ -21,6 +21,9 @@ export declare const LIMITS: {
     readonly MAX_DIFF_CONTENT_LENGTH: 1000;
     readonly MAX_OVERALL_DIFF_LENGTH: 3000;
     readonly HUNK_HEADER_OFFSET: 10;
+    readonly MAX_CONFLUENCE_CONTENT_LENGTH: 2000;
+    readonly MAX_CONFLUENCE_PAGES_COUNT: 5;
+    readonly CONFLUENCE_CONTENT_SUMMARY_LENGTH: 300;
 };
 export declare const HTTP_STATUS: {
     readonly OK: 200;
@@ -52,6 +55,13 @@ export declare const HEADERS: {
 export declare const JIRA_ENDPOINTS: {
     readonly ISSUE: "/issue/";
     readonly USER: "/myself";
+    readonly REMOTE_LINK: "/issue/{issueKey}/remotelink";
+};
+export declare const CONFLUENCE_ENDPOINTS: {
+    readonly API_VERSION: "/rest/api";
+    readonly CONTENT: "/content";
+    readonly CONTENT_BY_ID: "/content/{id}";
+    readonly SEARCH: "/content/search";
 };
 export declare const SYSTEM: {
     readonly EXECUTABLE_PERMISSIONS: "755";

@@ -41,7 +41,10 @@ export const LIMITS = {
   MAX_TEMPLATE_PREVIEW_LENGTH: 800,
   MAX_DIFF_CONTENT_LENGTH: 1000,
   MAX_OVERALL_DIFF_LENGTH: 3000,
-  HUNK_HEADER_OFFSET: 10
+  HUNK_HEADER_OFFSET: 10,
+  MAX_CONFLUENCE_CONTENT_LENGTH: 2000,
+  MAX_CONFLUENCE_PAGES_COUNT: 5,
+  CONFLUENCE_CONTENT_SUMMARY_LENGTH: 300
 } as const;
 
 // HTTP Status Codes
@@ -88,7 +91,16 @@ export const HEADERS = {
 // JIRA Endpoints
 export const JIRA_ENDPOINTS = {
   ISSUE: '/issue/',
-  USER: '/myself'
+  USER: '/myself',
+  REMOTE_LINK: '/issue/{issueKey}/remotelink'
+} as const;
+
+// Confluence Endpoints
+export const CONFLUENCE_ENDPOINTS = {
+  API_VERSION: '/rest/api',
+  CONTENT: '/content',
+  CONTENT_BY_ID: '/content/{id}',
+  SEARCH: '/content/search'
 } as const;
 
 // System Constants
