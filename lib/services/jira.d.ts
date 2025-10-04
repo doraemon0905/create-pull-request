@@ -66,6 +66,11 @@ export declare class JiraService {
      * Uses manual parsing instead of regex to prevent ReDoS attacks
      */
     private stripHtmlAndCompress;
+    /**
+     * Truncate content at sentence boundaries using OWASP-compliant regex to prevent ReDoS attacks
+     * Uses lookahead assertions and backreferences to mimic possessive quantifiers
+     */
+    private truncateAtSentenceBoundary;
     validateConnection(): Promise<boolean>;
 }
 //# sourceMappingURL=jira.d.ts.map

@@ -381,26 +381,45 @@ export class JiraService {
 
     // If content is too long, truncate intelligently
     if (cleanContent.length > LIMITS.MAX_CONFLUENCE_CONTENT_LENGTH) {
-      // Try to truncate at sentence boundaries while preserving original punctuation
-      const sentenceMatches = cleanContent.match(/[^.!?]*[.!?]+/g) || [];
-      let truncated = '';
-
-      for (const sentence of sentenceMatches) {
-        if ((truncated + sentence).length > LIMITS.MAX_CONFLUENCE_CONTENT_LENGTH) {
-          break;
-        }
-        truncated += sentence;
-      }
-
-      // Only add ellipsis if we actually truncated content
-      if (truncated.length < cleanContent.length) {
-        cleanContent = truncated.trim() + '...';
-      } else {
-        cleanContent = truncated.trim();
-      }
+      // Use OWASP-compliant regex with lookahead assertions to prevent ReDoS
+      cleanContent = this.truncateAtSentenceBoundary(cleanContent, LIMITS.MAX_CONFLUENCE_CONTENT_LENGTH);
     }
 
     return cleanContent;
+  }
+
+  /**
+   * Truncate content at sentence boundaries using OWASP-compliant regex to prevent ReDoS attacks
+   * Uses lookahead assertions and backreferences to mimic possessive quantifiers
+   */
+  private truncateAtSentenceBoundary(content: string, maxLength: number): string {
+    // OWASP-compliant regex using lookahead and backreferences to prevent backtracking
+    // Pattern: (?=([^.!?]*[.!?]+))\1
+    // This mimics possessive quantifiers by using atomic grouping
+    const sentenceRegex = /(?=([^.!?]*[.!?]+))\1/g;
+    const sentences: string[] = [];
+    let match;
+
+    // Extract all sentences using the secure regex
+    while ((match = sentenceRegex.exec(content)) !== null) {
+      sentences.push(match[1]);
+    }
+
+    // Build result by adding sentences until we reach the limit
+    let result = '';
+    for (const sentence of sentences) {
+      if ((result + sentence).length > maxLength) {
+        break;
+      }
+      result += sentence;
+    }
+
+    // Only add ellipsis if we actually truncated content
+    if (result.length < content.length) {
+      return result.trim() + '...';
+    }
+
+    return result.trim();
   }
 
   async validateConnection(): Promise<boolean> {
