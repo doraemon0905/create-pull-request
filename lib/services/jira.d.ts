@@ -29,6 +29,22 @@ export declare class JiraService {
     private initializeConfluenceClient;
     getTicket(ticketKey: string, fetchConfluence?: boolean): Promise<JiraTicket>;
     /**
+     * Fetch parent ticket information if it exists and is not an Epic
+     */
+    private fetchParentTicket;
+    /**
+     * Fetch Confluence pages if requested
+     */
+    private fetchConfluencePagesIfRequested;
+    /**
+     * Build the JiraTicket object from the fetched data
+     */
+    private buildJiraTicket;
+    /**
+     * Handle Jira API errors with specific error messages
+     */
+    private handleJiraApiError;
+    /**
      * Check if a Jira ticket has linked Confluence pages
      */
     hasConfluencePages(ticketKey: string): Promise<boolean>;
@@ -41,7 +57,13 @@ export declare class JiraService {
      */
     getConfluencePageContent(pageUrl: string): Promise<ConfluencePage | null>;
     /**
+     * Manually remove HTML tags without using regex to prevent ReDoS attacks
+     * This approach is O(n) linear time and completely safe from backtracking
+     */
+    private removeHtmlTagsManually;
+    /**
      * Strip HTML tags and compress content for AI consumption
+     * Uses manual parsing instead of regex to prevent ReDoS attacks
      */
     private stripHtmlAndCompress;
     validateConnection(): Promise<boolean>;

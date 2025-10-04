@@ -23,7 +23,6 @@ export declare const LIMITS: {
     readonly HUNK_HEADER_OFFSET: 10;
     readonly MAX_CONFLUENCE_CONTENT_LENGTH: 2000;
     readonly MAX_CONFLUENCE_PAGES_COUNT: 5;
-    readonly CONFLUENCE_CONTENT_SUMMARY_LENGTH: 300;
 };
 export declare const HTTP_STATUS: {
     readonly OK: 200;
