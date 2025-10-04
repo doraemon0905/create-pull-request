@@ -409,12 +409,10 @@ describe('JiraService', () => {
         expect(result).toBe(false);
       });
 
-      it('should return false when API call fails', async () => {
+      it('should throw error when API call fails', async () => {
         mockAxiosInstance.get.mockRejectedValue(new Error('API Error'));
 
-        const result = await jiraService.hasConfluencePages('PROJ-123');
-
-        expect(result).toBe(false);
+        await expect(jiraService.hasConfluencePages('PROJ-123')).rejects.toThrow('API Error');
       });
 
       it('should return false when response is not an array', async () => {

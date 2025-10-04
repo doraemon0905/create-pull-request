@@ -369,7 +369,7 @@ export class AIDescriptionGeneratorService {
       summaryPrompt += `TEMPLATE CHECKBOX RULE: If the PR template contains checkboxes, preserve them EXACTLY as they appear. Do not modify, fill, or check any existing checkboxes.\n`;
     }
     summaryPrompt += `IMPORTANT: Return the response as JSON with a single "summary" field containing the structured summary content. Use markdown formatting within the summary text.\n`;
-    summaryPrompt += `Example format: {"summary": "## Overview\\n[content here]\\n\\n## File Changes Analysis\\n[detailed file-by-file analysis with line links]\\n\\n## Technical Implementation Details\\n[content here]"}\n`;
+    summaryPrompt += String.raw`Example format: {"summary": "## Overview\n[content here]\n\n## File Changes Analysis\n[detailed file-by-file analysis with line links]\n\n## Technical Implementation Details\n[content here]"}` + '\n';
     summaryPrompt += `CRITICAL: Return ONLY the raw JSON object. Do NOT wrap it in markdown code blocks (\`\`\`json). Do NOT include any text before or after the JSON.\n`;
 
     if (template) {
@@ -614,7 +614,7 @@ export class AIDescriptionGeneratorService {
     prompt += `IMPORTANT: Format the response as valid JSON with exactly these fields:\n`;
     prompt += `- "title": The PR title (string)\n`;
     prompt += `- "body": The PR description (string)\n\n`;
-    prompt += `Example format: {"title": "PROJ-123: Add user authentication", "body": "## Summary\\n[description here]"}\n`;
+    prompt += String.raw`Example format: {"title": "PROJ-123: Add user authentication", "body": "## Summary\n[description here]"}` + '\n';
     prompt += `CRITICAL: Return ONLY the raw JSON object. Do NOT wrap it in markdown code blocks (\`\`\`json). Do NOT include any text before or after the JSON.`;
 
     return prompt;

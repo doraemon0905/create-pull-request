@@ -24,7 +24,7 @@ export interface JiraTicket {
 export declare class JiraService {
     private client;
     private confluenceClient;
-    private jiraConfig;
+    private readonly jiraConfig;
     constructor();
     private initializeConfluenceClient;
     getTicket(ticketKey: string, fetchConfluence?: boolean): Promise<JiraTicket>;

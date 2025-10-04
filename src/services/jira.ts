@@ -30,7 +30,7 @@ export interface JiraTicket {
 export class JiraService {
   private client: AxiosInstance;
   private confluenceClient: AxiosInstance | null = null;
-  private jiraConfig: any;
+  private readonly jiraConfig: any;
 
   constructor() {
     this.jiraConfig = getConfig('jira');
@@ -187,24 +187,20 @@ export class JiraService {
       return false;
     }
 
-    try {
-      const remoteLinksResponse = await this.client.get(
-        JIRA_ENDPOINTS.REMOTE_LINK.replace('{issueKey}', ticketKey)
-      );
+    const remoteLinksResponse = await this.client.get(
+      JIRA_ENDPOINTS.REMOTE_LINK.replace('{issueKey}', ticketKey)
+    );
 
-      const remoteLinks = remoteLinksResponse.data;
-      if (!Array.isArray(remoteLinks)) {
-        return false;
-      }
-
-      // Check if any links are Confluence pages
-      return remoteLinks.some((link: any) =>
-        link.object?.url &&
-        (link.object.url.includes('confluence') || link.object.url.includes('wiki'))
-      );
-    } catch (_error) {
+    const remoteLinks = remoteLinksResponse.data;
+    if (!Array.isArray(remoteLinks)) {
       return false;
     }
+
+    // Check if any links are Confluence pages
+    return remoteLinks.some((link: any) =>
+      link.object?.url &&
+      (link.object.url.includes('confluence') || link.object.url.includes('wiki'))
+    );
   }
 
   /**
@@ -268,8 +264,11 @@ export class JiraService {
 
     try {
       // Extract page ID from URL (typical format: /pages/viewpage.action?pageId=123456)
-      const pageIdMatch = pageUrl.match(/pageId=(\d+)/);
-      const spaceKeyPageTitleMatch = pageUrl.match(/\/spaces\/([^/]+)\/pages\/\d+\/([^/?]+)/);
+      const pageIdRegex = /pageId=(\d+)/;
+      const spaceKeyPageTitleRegex = /\/spaces\/([^/]+)\/pages\/\d+\/([^/?]+)/;
+
+      const pageIdMatch = pageIdRegex.exec(pageUrl);
+      const spaceKeyPageTitleMatch = spaceKeyPageTitleRegex.exec(pageUrl);
 
       let pageId: string | null = null;
 
@@ -278,11 +277,11 @@ export class JiraService {
       } else if (spaceKeyPageTitleMatch) {
         // For newer Confluence URLs, we need to search by space and title
         const spaceKey = spaceKeyPageTitleMatch[1];
-        const pageTitle = decodeURIComponent(spaceKeyPageTitleMatch[2].replace(/\+/g, ' '));
+        const pageTitle = decodeURIComponent(spaceKeyPageTitleMatch[2].replaceAll('+', ' '));
 
         // Properly encode spaceKey and pageTitle to prevent CQL injection
         const encodedSpaceKey = encodeURIComponent(spaceKey);
-        const encodedPageTitle = encodeURIComponent(pageTitle).replace(/"/g, '\\"');
+        const encodedPageTitle = encodeURIComponent(pageTitle).replaceAll('"', String.raw`\"`);
         const searchResponse = await this.confluenceClient.get(`${CONFLUENCE_ENDPOINTS.SEARCH}?cql=space=${encodedSpaceKey}+AND+title="${encodedPageTitle}"`);
         if (searchResponse.data.results && searchResponse.data.results.length > 0) {
           pageId = searchResponse.data.results[0].id;
@@ -332,9 +331,7 @@ export class JiraService {
     let insideTag = false;
     let tagDepth = 0;
 
-    for (let i = 0; i < htmlContent.length; i++) {
-      const char = htmlContent[i];
-
+    for (const char of htmlContent) {
       if (char === '<') {
         insideTag = true;
         tagDepth++;
@@ -368,11 +365,11 @@ export class JiraService {
     // Remove HTML tags using a secure approach that follows OWASP secure coding practices
     // Use manual parsing instead of regex to completely avoid ReDoS vulnerabilities
     let cleanContent = this.removeHtmlTagsManually(htmlContent)
-      .replace(/&nbsp;/g, ' ')                   // Replace &nbsp; with space
-      .replace(/&amp;/g, '&')                   // Replace &amp; with &
-      .replace(/&lt;/g, '<')                    // Replace &lt; with <
-      .replace(/&gt;/g, '>')                    // Replace &gt; with >
-      .replace(/&quot;/g, '"')                  // Replace &quot; with "
+      .replaceAll('&nbsp;', ' ')                   // Replace &nbsp; with space
+      .replaceAll('&amp;', '&')                   // Replace &amp; with &
+      .replaceAll('&lt;', '<')                    // Replace &lt; with <
+      .replaceAll('&gt;', '>')                    // Replace &gt; with >
+      .replaceAll('&quot;', '"')                  // Replace &quot; with "
       .replace(/\s+/g, ' ')                     // Replace multiple whitespace with single space
       .trim();
 
