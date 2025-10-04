@@ -238,6 +238,46 @@ describe('JiraService', () => {
             await expect(jiraService.getTicket('PROJ-123')).rejects.toThrow('Parent not found');
         });
 
+        it('should handle description fallback when content structure is missing', async () => {
+            const responseWithSimpleDescription = {
+                ...mockTicketResponse,
+                data: {
+                    ...mockTicketResponse.data,
+                    fields: {
+                        ...mockTicketResponse.data.fields,
+                        description: 'Simple text description'
+                        // Missing content array structure
+                    }
+                }
+            };
+
+            mockAxiosInstance.get.mockResolvedValue(responseWithSimpleDescription);
+
+            const result = await jiraService.getTicket('PROJ-123');
+
+            expect(result.description).toBe('Simple text description');
+        });
+
+        it('should handle empty description fallback', async () => {
+            const responseWithEmptyDescription = {
+                ...mockTicketResponse,
+                data: {
+                    ...mockTicketResponse.data,
+                    fields: {
+                        ...mockTicketResponse.data.fields,
+                        description: null
+                        // No description at all
+                    }
+                }
+            };
+
+            mockAxiosInstance.get.mockResolvedValue(responseWithEmptyDescription);
+
+            const result = await jiraService.getTicket('PROJ-123');
+
+            expect(result.description).toBe('');
+        });
+
         it('should handle empty parent ticket summary', async () => {
             const responseWithParent = {
                 ...mockTicketResponse,

@@ -291,6 +291,84 @@ describe('GitService', () => {
       expect(result.files[0].diffContent).toBeUndefined();
       expect(result.files[0].lineNumbers).toBeUndefined();
     });
+
+    it('should handle files without insertions property', async () => {
+      const mockDiffSummary = {
+        changed: 1,
+        insertions: 0,
+        deletions: 0,
+        files: [
+          {
+            file: 'src/test.ts',
+            deletions: 2,
+            changes: 2,
+            binary: false
+            // Missing insertions property
+          }
+        ]
+      };
+
+      mockGit.diffSummary.mockResolvedValue(mockDiffSummary as any);
+      mockGit.log.mockResolvedValue({ all: [], latest: null, total: 0 } as any);
+
+      const result = await gitService.getChanges('main');
+
+      expect(result.files[0].insertions).toBe(0);
+      expect(result.files[0].deletions).toBe(2);
+      expect(result.files[0].changes).toBe(2);
+    });
+
+    it('should handle files without deletions property', async () => {
+      const mockDiffSummary = {
+        changed: 1,
+        insertions: 5,
+        deletions: 0,
+        files: [
+          {
+            file: 'src/test.ts',
+            insertions: 5,
+            changes: 5,
+            binary: false
+            // Missing deletions property
+          }
+        ]
+      };
+
+      mockGit.diffSummary.mockResolvedValue(mockDiffSummary as any);
+      mockGit.log.mockResolvedValue({ all: [], latest: null, total: 0 } as any);
+
+      const result = await gitService.getChanges('main');
+
+      expect(result.files[0].insertions).toBe(5);
+      expect(result.files[0].deletions).toBe(0);
+      expect(result.files[0].changes).toBe(5);
+    });
+
+    it('should handle files without changes property', async () => {
+      const mockDiffSummary = {
+        changed: 1,
+        insertions: 5,
+        deletions: 2,
+        files: [
+          {
+            file: 'src/test.ts',
+            insertions: 5,
+            deletions: 2,
+            binary: false
+            // Missing changes property
+          }
+        ]
+      };
+
+      mockGit.diffSummary.mockResolvedValue(mockDiffSummary as any);
+      mockGit.log.mockResolvedValue({ all: [], latest: null, total: 0 } as any);
+
+      const result = await gitService.getChanges('main');
+
+      expect(result.files[0].insertions).toBe(5);
+      expect(result.files[0].deletions).toBe(2);
+      expect(result.files[0].changes).toBe(0);
+    });
   });
 
   describe('getDiffContent', () => {

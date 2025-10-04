@@ -335,6 +335,20 @@ describe('GitHubService', () => {
       expect(result).toEqual([]);
     });
 
+    it('should skip templates that fail to load', async () => {
+      const _templateDir = '.github/PULL_REQUEST_TEMPLATE';
+
+      // Mock readdirSync to return files
+      jest.mocked(mockedFs.readdirSync).mockReturnValue(['template1.md', 'template2.md'] as any);
+
+      // Mock existsSync to return false for all files (simulating tryLoadTemplate returning null)
+      jest.mocked(mockedFs.existsSync).mockReturnValue(false);
+
+      const result = await githubService.getPullRequestTemplates();
+
+      expect(result).toEqual([]);
+    });
+
     it('should handle multiple templates in directory', async () => {
       const templateDir = '.github/PULL_REQUEST_TEMPLATE';
 

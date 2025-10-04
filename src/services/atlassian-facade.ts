@@ -1,5 +1,5 @@
-import { JiraService as AtlassianJiraService, JiraTicket as AtlassianJiraTicket } from './atlassian/jira.js';
-import { ConfluenceService, ConfluencePage as AtlassianConfluencePage } from './atlassian/confluence.js';
+import { JiraService as AtlassianJiraService } from './atlassian/jira.js';
+import { ConfluenceService } from './atlassian/confluence.js';
 
 // Re-export interfaces for backward compatibility
 export interface ConfluencePage {
