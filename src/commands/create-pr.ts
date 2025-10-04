@@ -1,7 +1,7 @@
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 import { createSpinner } from '../utils/spinner.js';
-import { JiraService } from '../services/jira.js';
+import { JiraService } from '../services/atlassian-facade.js';
 import { GitHubService } from '../services/github.js';
 import { GitService } from '../services/git.js';
 import { AIDescriptionGeneratorService } from '../services/ai-description-generator.js';

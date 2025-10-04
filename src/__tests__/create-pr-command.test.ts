@@ -1,7 +1,7 @@
 import { createPullRequest, CreatePROptions } from '../commands/create-pr';
 import { GitService } from '../services/git';
 import { GitHubService } from '../services/github';
-import { JiraService } from '../services/jira';
+import { JiraService } from '../services/atlassian-facade';
 import { AIDescriptionGeneratorService } from '../services/ai-description-generator';
 import { validateConfig } from '../utils/config';
 
@@ -26,7 +26,7 @@ jest.mock('@octokit/rest', () => ({
     }
   }))
 }));
-jest.mock('../services/jira');
+jest.mock('../services/atlassian-facade');
 jest.mock('../services/git');
 jest.mock('../services/github');
 jest.mock('../services/ai-description-generator');
@@ -374,7 +374,7 @@ describe('Create PR Command', () => {
         .mockResolvedValueOnce({ retry: true }) // Initial retry choice
         .mockResolvedValueOnce({ continueRetry: true }) // Continue after first retry failure
         .mockResolvedValueOnce({ continueRetry: true }); // Continue after second retry failure
-        // No third prompt because max retries (3) are reached
+      // No third prompt because max retries (3) are reached
 
       await expect(createPullRequest(mockOptions)).rejects.toThrow('Final AI failure');
 

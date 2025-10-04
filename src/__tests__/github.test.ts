@@ -335,6 +335,20 @@ describe('GitHubService', () => {
       expect(result).toEqual([]);
     });
 
+    it('should skip templates that fail to load', async () => {
+      const _templateDir = '.github/PULL_REQUEST_TEMPLATE';
+
+      // Mock readdirSync to return files
+      jest.mocked(mockedFs.readdirSync).mockReturnValue(['template1.md', 'template2.md'] as any);
+
+      // Mock existsSync to return false for all files (simulating tryLoadTemplate returning null)
+      jest.mocked(mockedFs.existsSync).mockReturnValue(false);
+
+      const result = await githubService.getPullRequestTemplates();
+
+      expect(result).toEqual([]);
+    });
+
     it('should handle multiple templates in directory', async () => {
       const templateDir = '.github/PULL_REQUEST_TEMPLATE';
 
@@ -370,6 +384,268 @@ describe('GitHubService', () => {
         name: 'template2.md',
         content: 'Template 2 content'
       });
+    });
+  });
+
+  describe('findExistingPullRequest', () => {
+    const mockRepo = {
+      owner: 'testowner',
+      repo: 'testrepo'
+    };
+
+    it('should find existing pull request', async () => {
+      const mockResponse = {
+        data: [
+          {
+            id: 123,
+            number: 1,
+            title: 'Existing PR',
+            html_url: 'https://github.com/testowner/testrepo/pull/1'
+          }
+        ]
+      };
+
+      mockOctokit.rest.pulls.list.mockResolvedValue(mockResponse);
+
+      const result = await githubService.findExistingPullRequest(mockRepo, 'feature/test');
+
+      expect(result).toEqual(mockResponse.data[0]);
+      expect(mockOctokit.rest.pulls.list).toHaveBeenCalledWith({
+        owner: 'testowner',
+        repo: 'testrepo',
+        head: 'testowner:feature/test',
+        state: 'open'
+      });
+    });
+
+    it('should return null when no existing pull request found', async () => {
+      const mockResponse = {
+        data: []
+      };
+
+      mockOctokit.rest.pulls.list.mockResolvedValue(mockResponse);
+
+      const result = await githubService.findExistingPullRequest(mockRepo, 'feature/test');
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null when API call fails', async () => {
+      mockOctokit.rest.pulls.list.mockRejectedValue(new Error('API Error'));
+
+      const result = await githubService.findExistingPullRequest(mockRepo, 'feature/test');
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('updatePullRequest', () => {
+    const mockRepo = {
+      owner: 'testowner',
+      repo: 'testrepo'
+    };
+
+    it('should update pull request successfully', async () => {
+      const mockResponse = {
+        data: {
+          id: 123,
+          number: 1,
+          title: 'Updated PR',
+          html_url: 'https://github.com/testowner/testrepo/pull/1'
+        }
+      };
+
+      mockOctokit.rest.pulls.update.mockResolvedValue(mockResponse);
+
+      const updateData = {
+        title: 'Updated PR',
+        body: 'Updated description'
+      };
+
+      const result = await githubService.updatePullRequest(mockRepo, 1, updateData);
+
+      expect(result).toEqual(mockResponse.data);
+      expect(mockOctokit.rest.pulls.update).toHaveBeenCalledWith({
+        owner: 'testowner',
+        repo: 'testrepo',
+        pull_number: 1,
+        title: 'Updated PR',
+        body: 'Updated description'
+      });
+    });
+
+    it('should handle authentication errors', async () => {
+      const error = new Error('Unauthorized');
+      (error as any).status = 401;
+
+      mockOctokit.rest.pulls.update.mockRejectedValue(error);
+
+      await expect(githubService.updatePullRequest(mockRepo, 1, { title: 'Updated' }))
+        .rejects.toThrow('Authentication failed. Please check your GitHub token.');
+    });
+
+    it('should handle permission errors', async () => {
+      const error = new Error('Forbidden');
+      (error as any).status = 403;
+
+      mockOctokit.rest.pulls.update.mockRejectedValue(error);
+
+      await expect(githubService.updatePullRequest(mockRepo, 1, { title: 'Updated' }))
+        .rejects.toThrow('Access denied. Please check your GitHub token permissions.');
+    });
+
+    it('should handle other API errors', async () => {
+      const error = new Error('Not Found');
+      (error as any).status = 404;
+
+      mockOctokit.rest.pulls.update.mockRejectedValue(error);
+
+      await expect(githubService.updatePullRequest(mockRepo, 1, { title: 'Updated' }))
+        .rejects.toThrow('Pull request not found.');
+    });
+
+    it('should handle generic API errors', async () => {
+      const error = new Error('Server Error');
+      (error as any).status = 500;
+
+      mockOctokit.rest.pulls.update.mockRejectedValue(error);
+
+      await expect(githubService.updatePullRequest(mockRepo, 1, { title: 'Updated' }))
+        .rejects.toThrow('GitHub API error: Server Error');
+    });
+  });
+
+  describe('extractTemplateNameFromPath', () => {
+    it('should extract filename from path with directory', () => {
+      const result = (githubService as any).extractTemplateNameFromPath('.github/PULL_REQUEST_TEMPLATE.md');
+      expect(result).toBe('PULL_REQUEST_TEMPLATE.md');
+    });
+
+    it('should return filename when no directory', () => {
+      const result = (githubService as any).extractTemplateNameFromPath('template.md');
+      expect(result).toBe('template.md');
+    });
+  });
+
+  describe('validatePullRequestData', () => {
+    const mockRepo = {
+      owner: 'testowner',
+      repo: 'testrepo'
+    };
+
+    it('should validate all required fields', async () => {
+      const invalidPR = {
+        title: '',
+        body: '',
+        head: '',
+        base: ''
+      };
+
+      await expect(githubService.createPullRequest(mockRepo, invalidPR))
+        .rejects.toThrow('Pull request validation failed');
+    });
+
+    it('should validate title length limit', async () => {
+      const longTitle = 'a'.repeat(300); // Assuming MAX_PR_TITLE_LENGTH is less than 300
+      const invalidPR = {
+        title: longTitle,
+        body: 'Test description',
+        head: 'feature/test',
+        base: 'main'
+      };
+
+      await expect(githubService.createPullRequest(mockRepo, invalidPR))
+        .rejects.toThrow('Title is too long');
+    });
+  });
+
+  describe('createOrUpdatePullRequest', () => {
+    const mockRepo = {
+      owner: 'testowner',
+      repo: 'testrepo'
+    };
+
+    const mockPullRequest = {
+      title: 'Test PR',
+      body: 'Test description',
+      head: 'feature/test',
+      base: 'main',
+      draft: false
+    };
+
+    it('should update existing pull request', async () => {
+      const existingPR = {
+        id: 123,
+        number: 1,
+        title: 'Existing PR',
+        html_url: 'https://github.com/testowner/testrepo/pull/1'
+      };
+
+      const updatedPR = {
+        id: 123,
+        number: 1,
+        title: 'Test PR',
+        html_url: 'https://github.com/testowner/testrepo/pull/1'
+      };
+
+      // Mock findExistingPullRequest to return existing PR
+      jest.spyOn(githubService, 'findExistingPullRequest').mockResolvedValue(existingPR);
+      jest.spyOn(githubService, 'updatePullRequest').mockResolvedValue(updatedPR);
+
+      const result = await githubService.createOrUpdatePullRequest(mockRepo, mockPullRequest);
+
+      expect(result).toEqual({ data: updatedPR, isUpdate: true });
+      expect(githubService.findExistingPullRequest).toHaveBeenCalledWith(mockRepo, 'feature/test');
+      expect(githubService.updatePullRequest).toHaveBeenCalledWith(mockRepo, 1, {
+        title: 'Test PR',
+        body: 'Test description',
+        base: 'main',
+        draft: false
+      });
+    });
+
+    it('should create new pull request when none exists', async () => {
+      const newPR = {
+        id: 124,
+        number: 2,
+        title: 'Test PR',
+        html_url: 'https://github.com/testowner/testrepo/pull/2'
+      };
+
+      // Mock findExistingPullRequest to return null
+      jest.spyOn(githubService, 'findExistingPullRequest').mockResolvedValue(null);
+      jest.spyOn(githubService, 'createPullRequest').mockResolvedValue(newPR);
+
+      const result = await githubService.createOrUpdatePullRequest(mockRepo, mockPullRequest);
+
+      expect(result).toEqual({ data: newPR, isUpdate: false });
+      expect(githubService.findExistingPullRequest).toHaveBeenCalledWith(mockRepo, 'feature/test');
+      expect(githubService.createPullRequest).toHaveBeenCalledWith(mockRepo, mockPullRequest);
+    });
+  });
+
+  describe('createPullRequest generic error handling', () => {
+    const mockRepo = {
+      owner: 'testowner',
+      repo: 'testrepo'
+    };
+
+    const mockPullRequest = {
+      title: 'Test PR',
+      body: 'Test description',
+      head: 'feature/test',
+      base: 'main',
+      draft: false
+    };
+
+    it('should handle generic API errors', async () => {
+      const error = new Error('Server Error');
+      (error as any).status = 500;
+
+      mockOctokit.rest.pulls.create.mockRejectedValue(error);
+
+      await expect(githubService.createPullRequest(mockRepo, mockPullRequest))
+        .rejects.toThrow('GitHub API error: Server Error');
     });
   });
 });

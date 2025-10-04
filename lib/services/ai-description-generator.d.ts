@@ -1,6 +1,7 @@
-import { JiraTicket } from './jira.js';
+import { JiraTicket } from './atlassian-facade.js';
 import { GitChanges } from './git.js';
 import { PullRequestTemplate } from './github.js';
+import { GeneratedPRContent } from './ai-providers/response-parser.js';
 export interface GenerateDescriptionOptions {
     jiraTicket: JiraTicket;
     gitChanges: GitChanges;
@@ -13,43 +14,13 @@ export interface GenerateDescriptionOptions {
         currentBranch: string;
     };
 }
-export interface GeneratedPRContent {
-    title: string;
-    body: string;
-    summary?: string;
-}
-export type AIProvider = 'claude' | 'chatgpt' | 'gemini' | 'copilot';
-export interface AIConfig {
-    provider: AIProvider;
-    apiKey: string;
-    model?: string;
-}
+export { GeneratedPRContent };
 export declare class AIDescriptionGeneratorService {
-    private clients;
-    private selectedProvider;
+    private providerManager;
+    private promptBuilder;
+    private responseParser;
     constructor();
-    private initializeClients;
     generatePRDescription(options: GenerateDescriptionOptions): Promise<GeneratedPRContent>;
-    private selectAIProvider;
     private generateSummary;
-    private buildPrompt;
-    private callAIAPI;
-    private getAIProvidersConfig;
-    private getModelForProvider;
-    private generateFileUrl;
-    private generateLineUrl;
-    private generateLineLinks;
-    private callClaudeAPI;
-    private callChatGPTAPI;
-    private callGeminiAPI;
-    private callCopilotAPI;
-    private parseAIResponse;
-    private isValidJSON;
-    private cleanJSONResponse;
-    private extractContentFromResponse;
-    private parseResponseContent;
-    private extractTitle;
-    private getFileRelevanceDescription;
-    private extractDiffSummary;
 }
 //# sourceMappingURL=ai-description-generator.d.ts.map
