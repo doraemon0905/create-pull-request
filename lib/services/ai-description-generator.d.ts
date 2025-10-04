@@ -1,4 +1,4 @@
-import { JiraTicket } from './jira.js';
+import { JiraTicket } from './atlassian-facade.js';
 import { GitChanges } from './git.js';
 import { PullRequestTemplate } from './github.js';
 export interface GenerateDescriptionOptions {

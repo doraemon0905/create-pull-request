@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import { JiraTicket } from './jira.js';
+import { JiraTicket } from './atlassian-facade.js';
 import { GitChanges, FileChange } from './git.js';
 import { PullRequestTemplate } from './github.js';
 import { getConfig } from '../utils/config.js';
@@ -201,7 +201,7 @@ export class AIDescriptionGeneratorService {
     if (jiraTicket.confluencePages && jiraTicket.confluencePages.length > 0) {
       summaryPrompt += `\n## Related Confluence Documentation:\n`;
       summaryPrompt += `The following Confluence pages are linked to this Jira ticket and provide additional context:\n\n`;
-      
+
       for (const page of jiraTicket.confluencePages) {
         summaryPrompt += `### ${page.title}\n`;
         summaryPrompt += `- URL: ${page.url}\n`;
@@ -438,7 +438,7 @@ export class AIDescriptionGeneratorService {
     if (jiraTicket.confluencePages && jiraTicket.confluencePages.length > 0) {
       prompt += `\n## Related Confluence Documentation:\n`;
       prompt += `The following Confluence pages provide important context and requirements for this ticket:\n\n`;
-      
+
       for (const page of jiraTicket.confluencePages) {
         prompt += `### Documentation: ${page.title}\n`;
         prompt += `- Source: ${page.url}\n`;

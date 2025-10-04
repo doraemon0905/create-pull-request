@@ -192,7 +192,7 @@ describe('AIDescriptionGeneratorService', () => {
           }]
         }
       };
-      
+
       mockAxiosInstance.post
         .mockResolvedValueOnce(mockSummaryResponse)
         .mockResolvedValueOnce(mockDescriptionResponse);
@@ -223,7 +223,7 @@ describe('AIDescriptionGeneratorService', () => {
           }]
         }
       };
-      
+
       mockAxiosInstance.post
         .mockResolvedValueOnce(mockSummaryResponse)
         .mockResolvedValueOnce(mockDescriptionResponse);
@@ -334,7 +334,7 @@ describe('AIDescriptionGeneratorService', () => {
         .mockReturnValue({} as any);
 
       service = new AIDescriptionGeneratorService();
-      
+
       await expect(service.generatePRDescription(mockOptions)).rejects.toThrow('No content received from ChatGPT API');
     });
 
@@ -358,7 +358,7 @@ describe('AIDescriptionGeneratorService', () => {
         .mockReturnValue({} as any);
 
       service = new AIDescriptionGeneratorService();
-      
+
       await expect(service.generatePRDescription(mockOptions)).rejects.toThrow('No content received from ChatGPT API');
     });
   });
@@ -367,7 +367,7 @@ describe('AIDescriptionGeneratorService', () => {
     it('should call Gemini API with correct parameters', async () => {
       // Clear all mocks first
       jest.clearAllMocks();
-      
+
       // Mock config to only have Gemini
       mockedGetConfig.mockImplementation((section: any) => {
         switch (section) {
@@ -376,7 +376,7 @@ describe('AIDescriptionGeneratorService', () => {
           case 'copilot':
             return { apiToken: null };
           case 'aiProviders':
-            return { 
+            return {
               gemini: { apiKey: 'gemini-key', model: 'gemini-1.5-pro' },
               claude: { apiKey: null },
               openai: { apiKey: null },
@@ -474,7 +474,7 @@ describe('AIDescriptionGeneratorService', () => {
       mockedAxios.create.mockReturnValue(mockCopilotInstance as any);
 
       service = new AIDescriptionGeneratorService();
-      
+
       await expect(service.generatePRDescription(mockOptions)).rejects.toThrow('No content received from Copilot API');
     });
 
@@ -515,7 +515,7 @@ describe('AIDescriptionGeneratorService', () => {
       mockedAxios.create.mockReturnValue(mockCopilotInstance as any);
 
       service = new AIDescriptionGeneratorService();
-      
+
       await expect(service.generatePRDescription(mockOptions)).rejects.toThrow('No content received from Copilot API');
     });
   });
@@ -839,7 +839,7 @@ Authentication feature implementation following Confluence requirements.
 
     it('should truncate long Confluence content appropriately', async () => {
       const longContent = 'This is a very long content that repeats. '.repeat(100); // ~4200 chars
-      
+
       const mockOptionsWithLongContent = {
         ...mockOptions,
         jiraTicket: {
@@ -873,7 +873,7 @@ Authentication feature implementation following Confluence requirements.
       const promptCall = mockAxiosInstance.post.mock.calls[0];
       const requestData = promptCall[1];
       const prompt = requestData.messages[0].content;
-      
+
       expect(prompt).toContain('Long Document');
       expect(prompt).toContain('This is a very long content');
       // The total prompt should be reasonable, not 4200+ chars from Confluence alone
@@ -901,6 +901,17 @@ Authentication feature implementation following Confluence requirements.
       expect(prompt).toContain('Architecture Guide');
       expect(prompt).toContain('https://company.atlassian.net/confluence/spaces/ARCH/pages/123456/Architecture+Guide');
       expect(prompt).toContain('Source: https://');
+    });
+  });
+
+  describe('constructor error handling', () => {
+    it('should handle config loading failure gracefully', () => {
+      mockedGetConfig.mockImplementation(() => {
+        throw new Error('Config not found');
+      });
+
+      // Should throw error when config fails and no environment variables are available
+      expect(() => new AIDescriptionGeneratorService()).toThrow();
     });
   });
 });
