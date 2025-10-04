@@ -34,7 +34,7 @@ export class JiraService {
 
   constructor() {
     this.jiraConfig = getConfig('jira');
-    
+
     if (!this.jiraConfig.baseUrl || !this.jiraConfig.username || !this.jiraConfig.apiToken) {
       throw new Error('Missing Jira configuration. Please run "create-pr setup" to configure your credentials.');
     }
@@ -86,68 +86,97 @@ export class JiraService {
       const issue = response.data;
       const fields = issue.fields;
 
-      // Handle parent ticket information if it exists and is not an Epic
-      let parentTicket = null;
-      if (fields.parent && fields.issuetype.name.toLowerCase() !== 'epic') {
-        try {
-          // Fetch parent ticket details
-          const parentResponse = await this.client.get(`${JIRA_ENDPOINTS.ISSUE}${fields.parent.key}`, {
-            params: {
-              fields: 'summary,issuetype'
-            }
-          });
-          const parentFields = parentResponse.data.fields;
-          // Only include parent ticket if it has meaningful content
-          if (parentFields.summary && parentFields.summary.trim()) {
-            parentTicket = {
-              key: fields.parent.key,
-              summary: parentFields.summary.trim(),
-              issueType: parentFields.issuetype.name
-            };
-          }
-        } catch (parentError) {
-          // If parent ticket fetch fails, log it but don't fail the main request
-          console.warn(`Warning: Could not fetch parent ticket ${fields.parent.key}:`, parentError instanceof Error ? parentError.message : 'Unknown error');
-        }
-      }
+      const parentTicket = await this.fetchParentTicket(fields);
+      const confluencePages = await this.fetchConfluencePagesIfRequested(issue.key, fetchConfluence);
 
-      // Fetch Confluence pages linked to this ticket (only if requested)
-      let confluencePages: ConfluencePage[] = [];
-      if (fetchConfluence) {
-        try {
-          confluencePages = await this.getConfluencePages(issue.key);
-        } catch (error) {
-          console.warn(`Warning: Could not fetch Confluence pages for ticket ${issue.key}:`, 
-            error instanceof Error ? error.message : 'Unknown error');
-        }
-      }
-
-      return {
-        key: issue.key,
-        summary: fields.summary,
-        description: fields.description?.content?.[0]?.content?.[0]?.text || fields.description || '',
-        issueType: fields.issuetype.name,
-        status: fields.status.name,
-        assignee: fields.assignee?.displayName || null,
-        reporter: fields.reporter.displayName,
-        created: fields.created,
-        updated: fields.updated,
-        parentTicket,
-        confluencePages: confluencePages.length > 0 ? confluencePages : undefined
-      };
+      return this.buildJiraTicket(issue, fields, parentTicket, confluencePages);
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === HTTP_STATUS.NOT_FOUND) {
-          throw new Error(`Jira ticket '${ticketKey}' not found. Please check the ticket key.`);
-        } else if (error.response?.status === HTTP_STATUS.UNAUTHORIZED) {
-          throw new Error('Authentication failed. Please check your Jira credentials.');
-        } else if (error.response?.status === HTTP_STATUS.FORBIDDEN) {
-          throw new Error('Access denied. Please check your Jira permissions.');
-        }
-        throw new Error(`Jira API error: ${error.response?.data?.errorMessages?.[0] || error.message}`);
-      }
-      throw error;
+      this.handleJiraApiError(error, ticketKey);
     }
+  }
+
+  /**
+   * Fetch parent ticket information if it exists and is not an Epic
+   */
+  private async fetchParentTicket(fields: any): Promise<any> {
+    if (!fields.parent || fields.issuetype.name.toLowerCase() === 'epic') {
+      return null;
+    }
+
+    try {
+      const parentResponse = await this.client.get(`${JIRA_ENDPOINTS.ISSUE}${fields.parent.key}`, {
+        params: {
+          fields: 'summary,issuetype'
+        }
+      });
+      const parentFields = parentResponse.data.fields;
+
+      if (parentFields.summary && parentFields.summary.trim()) {
+        return {
+          key: fields.parent.key,
+          summary: parentFields.summary.trim(),
+          issueType: parentFields.issuetype.name
+        };
+      }
+      return null;
+    } catch (parentError) {
+      console.warn(`Warning: Could not fetch parent ticket ${fields.parent.key}:`,
+        parentError instanceof Error ? parentError.message : 'Unknown error');
+      return null;
+    }
+  }
+
+  /**
+   * Fetch Confluence pages if requested
+   */
+  private async fetchConfluencePagesIfRequested(ticketKey: string, fetchConfluence: boolean): Promise<ConfluencePage[]> {
+    if (!fetchConfluence) {
+      return [];
+    }
+
+    try {
+      return await this.getConfluencePages(ticketKey);
+    } catch (error) {
+      console.warn(`Warning: Could not fetch Confluence pages for ticket ${ticketKey}:`,
+        error instanceof Error ? error.message : 'Unknown error');
+      return [];
+    }
+  }
+
+  /**
+   * Build the JiraTicket object from the fetched data
+   */
+  private buildJiraTicket(issue: any, fields: any, parentTicket: any, confluencePages: ConfluencePage[]): JiraTicket {
+    return {
+      key: issue.key,
+      summary: fields.summary,
+      description: fields.description?.content?.[0]?.content?.[0]?.text || fields.description || '',
+      issueType: fields.issuetype.name,
+      status: fields.status.name,
+      assignee: fields.assignee?.displayName || null,
+      reporter: fields.reporter.displayName,
+      created: fields.created,
+      updated: fields.updated,
+      parentTicket,
+      confluencePages: confluencePages.length > 0 ? confluencePages : undefined
+    };
+  }
+
+  /**
+   * Handle Jira API errors with specific error messages
+   */
+  private handleJiraApiError(error: any, ticketKey: string): never {
+    if (axios.isAxiosError(error)) {
+      if (error.response?.status === HTTP_STATUS.NOT_FOUND) {
+        throw new Error(`Jira ticket '${ticketKey}' not found. Please check the ticket key.`);
+      } else if (error.response?.status === HTTP_STATUS.UNAUTHORIZED) {
+        throw new Error('Authentication failed. Please check your Jira credentials.');
+      } else if (error.response?.status === HTTP_STATUS.FORBIDDEN) {
+        throw new Error('Access denied. Please check your Jira permissions.');
+      }
+      throw new Error(`Jira API error: ${error.response?.data?.errorMessages?.[0] || error.message}`);
+    }
+    throw error;
   }
 
   /**
@@ -169,8 +198,8 @@ export class JiraService {
       }
 
       // Check if any links are Confluence pages
-      return remoteLinks.some((link: any) => 
-        link.object?.url && 
+      return remoteLinks.some((link: any) =>
+        link.object?.url &&
         (link.object.url.includes('confluence') || link.object.url.includes('wiki'))
       );
     } catch (_error) {
@@ -202,8 +231,8 @@ export class JiraService {
 
       // Filter for Confluence links and limit the count
       const confluenceLinks = remoteLinks
-        .filter((link: any) => 
-          link.object?.url && 
+        .filter((link: any) =>
+          link.object?.url &&
           (link.object.url.includes('confluence') || link.object.url.includes('wiki'))
         )
         .slice(0, LIMITS.MAX_CONFLUENCE_PAGES_COUNT);
@@ -216,14 +245,14 @@ export class JiraService {
             confluencePages.push(pageContent);
           }
         } catch (error) {
-          console.warn(`Warning: Could not fetch Confluence page content for ${link.object.url}:`, 
+          console.warn(`Warning: Could not fetch Confluence page content for ${link.object.url}:`,
             error instanceof Error ? error.message : 'Unknown error');
         }
       }
 
       return confluencePages;
     } catch (error) {
-      console.warn(`Warning: Could not fetch Confluence pages for ticket ${ticketKey}:`, 
+      console.warn(`Warning: Could not fetch Confluence pages for ticket ${ticketKey}:`,
         error instanceof Error ? error.message : 'Unknown error');
       return [];
     }
@@ -241,17 +270,20 @@ export class JiraService {
       // Extract page ID from URL (typical format: /pages/viewpage.action?pageId=123456)
       const pageIdMatch = pageUrl.match(/pageId=(\d+)/);
       const spaceKeyPageTitleMatch = pageUrl.match(/\/spaces\/([^/]+)\/pages\/\d+\/([^/?]+)/);
-      
+
       let pageId: string | null = null;
-      
+
       if (pageIdMatch) {
         pageId = pageIdMatch[1];
       } else if (spaceKeyPageTitleMatch) {
         // For newer Confluence URLs, we need to search by space and title
         const spaceKey = spaceKeyPageTitleMatch[1];
         const pageTitle = decodeURIComponent(spaceKeyPageTitleMatch[2].replace(/\+/g, ' '));
-        
-        const searchResponse = await this.confluenceClient.get(`${CONFLUENCE_ENDPOINTS.SEARCH}?cql=space=${spaceKey}+AND+title="${pageTitle}"`);
+
+        // Properly encode spaceKey and pageTitle to prevent CQL injection
+        const encodedSpaceKey = encodeURIComponent(spaceKey);
+        const encodedPageTitle = encodeURIComponent(pageTitle).replace(/"/g, '\\"');
+        const searchResponse = await this.confluenceClient.get(`${CONFLUENCE_ENDPOINTS.SEARCH}?cql=space=${encodedSpaceKey}+AND+title="${encodedPageTitle}"`);
         if (searchResponse.data.results && searchResponse.data.results.length > 0) {
           pageId = searchResponse.data.results[0].id;
         }
@@ -274,7 +306,7 @@ export class JiraService {
 
       const page = pageResponse.data;
       const bodyContent = page.body?.storage?.value || '';
-      
+
       // Strip HTML tags and compress content
       const cleanContent = this.stripHtmlAndCompress(bodyContent);
 
@@ -285,43 +317,84 @@ export class JiraService {
         url: pageUrl
       };
     } catch (error) {
-      console.warn(`Warning: Could not fetch Confluence page content from ${pageUrl}:`, 
+      console.warn(`Warning: Could not fetch Confluence page content from ${pageUrl}:`,
         error instanceof Error ? error.message : 'Unknown error');
       return null;
     }
   }
 
   /**
+   * Manually remove HTML tags without using regex to prevent ReDoS attacks
+   * This approach is O(n) linear time and completely safe from backtracking
+   */
+  private removeHtmlTagsManually(htmlContent: string): string {
+    let result = '';
+    let insideTag = false;
+    let tagDepth = 0;
+
+    for (let i = 0; i < htmlContent.length; i++) {
+      const char = htmlContent[i];
+
+      if (char === '<') {
+        insideTag = true;
+        tagDepth++;
+        result += ' '; // Replace tag with space
+      } else if (char === '>') {
+        insideTag = false;
+        tagDepth = Math.max(0, tagDepth - 1);
+      } else if (!insideTag) {
+        result += char;
+      }
+      // Skip characters inside tags
+    }
+
+    return result;
+  }
+
+  /**
    * Strip HTML tags and compress content for AI consumption
+   * Uses manual parsing instead of regex to prevent ReDoS attacks
    */
   private stripHtmlAndCompress(htmlContent: string): string {
     if (!htmlContent) return '';
 
-    // Remove HTML tags but keep the text content
-    let cleanContent = htmlContent
-      .replace(/<[^>]*>/g, ' ')  // Remove HTML tags
-      .replace(/&nbsp;/g, ' ')   // Replace &nbsp; with space
-      .replace(/&amp;/g, '&')    // Replace &amp; with &
-      .replace(/&lt;/g, '<')     // Replace &lt; with <
-      .replace(/&gt;/g, '>')     // Replace &gt; with >
-      .replace(/&quot;/g, '"')   // Replace &quot; with "
-      .replace(/\s+/g, ' ')      // Replace multiple whitespace with single space
+    // Input validation to prevent ReDoS attacks
+    // Limit input size to prevent excessive processing
+    const maxInputLength = 100000; // 100KB limit
+    if (htmlContent.length > maxInputLength) {
+      htmlContent = htmlContent.substring(0, maxInputLength);
+    }
+
+    // Remove HTML tags using a secure approach that follows OWASP secure coding practices
+    // Use manual parsing instead of regex to completely avoid ReDoS vulnerabilities
+    let cleanContent = this.removeHtmlTagsManually(htmlContent)
+      .replace(/&nbsp;/g, ' ')                   // Replace &nbsp; with space
+      .replace(/&amp;/g, '&')                   // Replace &amp; with &
+      .replace(/&lt;/g, '<')                    // Replace &lt; with <
+      .replace(/&gt;/g, '>')                    // Replace &gt; with >
+      .replace(/&quot;/g, '"')                  // Replace &quot; with "
+      .replace(/\s+/g, ' ')                     // Replace multiple whitespace with single space
       .trim();
 
     // If content is too long, truncate intelligently
     if (cleanContent.length > LIMITS.MAX_CONFLUENCE_CONTENT_LENGTH) {
-      // Try to truncate at sentence boundaries
-      const sentences = cleanContent.split(/[.!?]+/);
+      // Try to truncate at sentence boundaries while preserving original punctuation
+      const sentenceMatches = cleanContent.match(/[^.!?]*[.!?]+/g) || [];
       let truncated = '';
-      
-      for (const sentence of sentences) {
+
+      for (const sentence of sentenceMatches) {
         if ((truncated + sentence).length > LIMITS.MAX_CONFLUENCE_CONTENT_LENGTH) {
           break;
         }
-        truncated += sentence + '. ';
+        truncated += sentence;
       }
-      
-      cleanContent = truncated.trim() + '...';
+
+      // Only add ellipsis if we actually truncated content
+      if (truncated.length < cleanContent.length) {
+        cleanContent = truncated.trim() + '...';
+      } else {
+        cleanContent = truncated.trim();
+      }
     }
 
     return cleanContent;

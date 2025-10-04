@@ -140,7 +140,7 @@ create-pr create --jira PROJ-123 --dry-run
 
 1. **Validation**: Checks that you're in a git repository and have proper configuration
 2. **Jira Integration**: Fetches ticket details including summary, description, and metadata
-3. **Confluence Check**: Detects linked Confluence pages and asks if you want to include them
+3. **Confluence Check**: Optionally fetches linked Confluence pages after user confirmation
 4. **Git Analysis**: Analyzes file changes, commit messages, and diff content
 5. **Template Detection**: Looks for PR templates in your repository
 6. **AI Provider Selection**: Uses the configured AI provider or prompts you to select one if multiple are available
@@ -170,7 +170,7 @@ When a Jira ticket has linked Confluence pages, the tool will ask if you want to
 
 ### How It Works
 
-1. **Detection**: Automatically detects Confluence pages linked to your Jira ticket
+1. **Detection**: Detects Confluence pages linked to your Jira ticket
 2. **User Prompt**: Asks for confirmation before fetching (defaults to No for faster workflow)
 3. **Content Extraction**: If confirmed, fetches and processes Confluence page content
 4. **Smart Compression**: Automatically compresses content to optimize AI prompts

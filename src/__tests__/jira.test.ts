@@ -493,7 +493,7 @@ describe('JiraService', () => {
         const mockConfluenceInstance = {
           get: jest.fn()
         };
-        
+
         // Setup Confluence client responses
         mockConfluenceInstance.get
           .mockResolvedValueOnce(mockPageResponse) // First page content
@@ -570,7 +570,7 @@ describe('JiraService', () => {
         // Reset config for proper service creation
         mockedGetConfig.mockReturnValue(mockConfig);
         const serviceWithValidConfig = new JiraService();
-        
+
         // Manually set confluenceClient to null to simulate initialization failure
         (serviceWithValidConfig as any).confluenceClient = null;
 
@@ -584,7 +584,7 @@ describe('JiraService', () => {
 
       it('should handle API errors gracefully', async () => {
         const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
-        
+
         mockAxiosInstance.get.mockRejectedValue(new Error('API Error'));
 
         const result = await jiraService.getConfluencePages('PROJ-123');
@@ -681,7 +681,7 @@ describe('JiraService', () => {
 
       it('should handle new-style URLs with space and page title', async () => {
         const pageUrl = 'https://company.atlassian.net/confluence/spaces/DEV/pages/789012/API+Documentation';
-        
+
         const mockSearchResponse = {
           data: {
             results: [
@@ -716,15 +716,15 @@ describe('JiraService', () => {
           url: pageUrl
         });
 
-        expect(mockConfluenceInstance.get).toHaveBeenCalledWith('/content/search?cql=space=DEV+AND+title="API Documentation"');
+        expect(mockConfluenceInstance.get).toHaveBeenCalledWith('/content/search?cql=space=DEV+AND+title="API%20Documentation"');
       });
 
       it('should handle long content by truncating intelligently', async () => {
         const pageUrl = 'https://company.atlassian.net/confluence/pages/viewpage.action?pageId=123456';
-        
+
         // Create content longer than MAX_CONFLUENCE_CONTENT_LENGTH (2000)
         const longContent = 'This is a very long sentence that repeats many times. '.repeat(50); // ~2650 chars
-        
+
         const mockPageResponse = {
           data: {
             id: '123456',
@@ -793,7 +793,7 @@ describe('JiraService', () => {
     describe('stripHtmlAndCompress', () => {
       it('should strip HTML tags and compress whitespace', async () => {
         const htmlContent = '<h1>Title</h1><p>This is <strong>bold</strong> and <em>italic</em> text.</p><div>More content</div>';
-        
+
         // Access the private method through a test
         const newJiraService = new JiraService();
         const result = (newJiraService as any).stripHtmlAndCompress(htmlContent);
@@ -803,7 +803,7 @@ describe('JiraService', () => {
 
       it('should handle HTML entities correctly', async () => {
         const htmlContent = '<p>Text with &amp; ampersand, &lt; less than, &gt; greater than, &quot; quotes &nbsp; and non-breaking spaces.</p>';
-        
+
         const newJiraService = new JiraService();
         const result = (newJiraService as any).stripHtmlAndCompress(htmlContent);
 
@@ -820,7 +820,7 @@ describe('JiraService', () => {
       it('should truncate long content at sentence boundaries', async () => {
         // Create content longer than MAX_CONFLUENCE_CONTENT_LENGTH (2000)
         const longSentences = Array.from({ length: 100 }, (_, i) => `This is a very long sentence number ${i + 1} that contains quite a bit of text to make it realistically long.`).join(' ');
-        
+
         const newJiraService = new JiraService();
         const result = (newJiraService as any).stripHtmlAndCompress(longSentences);
 
@@ -953,7 +953,7 @@ describe('JiraService', () => {
 
       it('should handle Confluence fetch errors gracefully when explicitly requested', async () => {
         const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
-        
+
         const mockTicketResponse = {
           data: {
             key: 'PROJ-123',

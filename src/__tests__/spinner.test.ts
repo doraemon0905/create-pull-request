@@ -24,11 +24,11 @@ describe('Spinner', () => {
     mockWrite.mockClear();
     mockIsTTY.mockClear();
     mockConsoleLog.mockClear();
-    
+
     // Reset mock implementations
     mockWrite.mockImplementation(() => true);
     mockIsTTY.mockReturnValue(true);
-    mockConsoleLog.mockImplementation(() => {});
+    mockConsoleLog.mockImplementation(() => { });
 
     // Mock process.stdout
     process.stdout.write = mockWrite;
@@ -89,13 +89,13 @@ describe('Spinner', () => {
 
     it('should re-render when text is updated while spinning', () => {
       spinner.start('Initial text');
-      
+
       // Fast-forward to trigger at least one render
       jest.advanceTimersByTime(100);
       mockWrite.mockClear();
 
       spinner.text = 'Updated text';
-      
+
       // Should have called write to update the display
       expect(mockWrite).toHaveBeenCalled();
     });
@@ -138,10 +138,10 @@ describe('Spinner', () => {
     it('should not start multiple intervals when called multiple times', () => {
       spinner.start();
       const firstCall = jest.getTimerCount();
-      
+
       spinner.start();
       const secondCall = jest.getTimerCount();
-      
+
       expect(secondCall).toBe(firstCall);
     });
 
@@ -152,15 +152,15 @@ describe('Spinner', () => {
 
     it('should render spinner frames over time', () => {
       spinner.start('Testing...');
-      
+
       // Initial render
       expect(mockWrite).toHaveBeenCalled();
       mockWrite.mockClear();
-      
+
       // Advance time to trigger frame updates
       jest.advanceTimersByTime(80);
       expect(mockWrite).toHaveBeenCalled();
-      
+
       mockWrite.mockClear();
       jest.advanceTimersByTime(80);
       expect(mockWrite).toHaveBeenCalled();
@@ -178,9 +178,9 @@ describe('Spinner', () => {
       mockIsTTY.mockReturnValue(true);
       spinner.start();
       spinner.stop();
-      
+
       // Should have called write with clear line sequence
-      const clearLineCalls = mockWrite.mock.calls.filter(call => 
+      const clearLineCalls = mockWrite.mock.calls.filter(call =>
         call[0].includes('\r\x1b[K')
       );
       expect(clearLineCalls.length).toBeGreaterThan(0);
@@ -190,9 +190,9 @@ describe('Spinner', () => {
       mockIsTTY.mockReturnValue(false);
       spinner.start();
       mockWrite.mockClear();
-      
+
       spinner.stop();
-      
+
       // Should not have written anything for line clearing
       expect(mockWrite).not.toHaveBeenCalled();
     });
@@ -213,7 +213,7 @@ describe('Spinner', () => {
     it('should stop spinning and show success message', () => {
       spinner.start('Processing...');
       spinner.succeed('Completed successfully');
-      
+
       expect(spinner.isSpinning).toBe(false);
       expect(mockConsoleLog).toHaveBeenCalledWith(
         chalk.green('✅'),
@@ -224,7 +224,7 @@ describe('Spinner', () => {
     it('should use current text if no message provided', () => {
       spinner.start('Processing...');
       spinner.succeed();
-      
+
       expect(mockConsoleLog).toHaveBeenCalledWith(
         chalk.green('✅'),
         'Processing...'
@@ -246,7 +246,7 @@ describe('Spinner', () => {
     it('should stop spinning and show error message', () => {
       spinner.start('Processing...');
       spinner.fail('Failed to process');
-      
+
       expect(spinner.isSpinning).toBe(false);
       expect(mockConsoleLog).toHaveBeenCalledWith(
         chalk.red('❌'),
@@ -257,7 +257,7 @@ describe('Spinner', () => {
     it('should use current text if no message provided', () => {
       spinner.start('Processing...');
       spinner.fail();
-      
+
       expect(mockConsoleLog).toHaveBeenCalledWith(
         chalk.red('❌'),
         'Processing...'
@@ -278,20 +278,20 @@ describe('Spinner', () => {
   describe('spinner animation', () => {
     it('should cycle through spinner frames', () => {
       spinner.start('Testing frames...');
-      
+
       const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
       const writeCallsWithFrames: string[] = [];
-      
+
       // Capture frames from multiple renders
       for (let i = 0; i < frames.length + 2; i++) {
         jest.advanceTimersByTime(80);
-        
+
         // Find the most recent write call with a frame
         const recentCalls = mockWrite.mock.calls.slice(-5);
-        const frameCall = recentCalls.find(call => 
+        const frameCall = recentCalls.find(call =>
           frames.some(frame => call[0].includes(frame))
         );
-        
+
         if (frameCall) {
           const frameMatch = frames.find(frame => frameCall[0].includes(frame));
           if (frameMatch && !writeCallsWithFrames.includes(frameMatch)) {
@@ -299,10 +299,10 @@ describe('Spinner', () => {
           }
         }
       }
-      
+
       // Should have cycled through multiple frames
       expect(writeCallsWithFrames.length).toBeGreaterThan(3);
-      
+
       // Should contain expected frames
       writeCallsWithFrames.forEach(frame => {
         expect(frames).toContain(frame);
@@ -312,11 +312,11 @@ describe('Spinner', () => {
     it('should include text in spinner output', () => {
       const testText = 'Loading important data...';
       spinner.start(testText);
-      
+
       jest.advanceTimersByTime(80);
-      
+
       // Should have written output containing the text
-      const textOutputs = mockWrite.mock.calls.filter(call => 
+      const textOutputs = mockWrite.mock.calls.filter(call =>
         call[0].includes(testText)
       );
       expect(textOutputs.length).toBeGreaterThan(0);
@@ -327,44 +327,44 @@ describe('Spinner', () => {
     it('should handle multiple independent spinners', () => {
       const spinner1 = createSpinner();
       const spinner2 = createSpinner();
-      
+
       spinner1.start('Spinner 1');
       spinner2.start('Spinner 2');
-      
+
       expect(spinner1.isSpinning).toBe(true);
       expect(spinner2.isSpinning).toBe(true);
       expect(spinner1.text).toBe('Spinner 1');
       expect(spinner2.text).toBe('Spinner 2');
-      
+
       spinner1.stop();
       expect(spinner1.isSpinning).toBe(false);
       expect(spinner2.isSpinning).toBe(true);
-      
+
       spinner2.stop();
     });
   });
 
   describe('error handling', () => {
-    it('should handle write errors gracefully', () => {
+    it('should throw write errors when they occur', () => {
       // Create a new spinner for this test to avoid affecting others
       const errorSpinner = createSpinner();
-      
+
       mockWrite.mockImplementation(() => {
         throw new Error('Write error');
       });
-      
+
       expect(() => {
         errorSpinner.start('Test');
         jest.advanceTimersByTime(80);
         errorSpinner.stop();
-      }).not.toThrow();
+      }).toThrow('Write error');
     });
   });
 
   describe('method chaining', () => {
     it('should support method chaining', () => {
       const chainSpinner = createSpinner();
-      
+
       expect(() => {
         chainSpinner
           .start('Initial')
