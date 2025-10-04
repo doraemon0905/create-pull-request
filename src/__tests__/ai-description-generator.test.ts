@@ -119,9 +119,11 @@ describe('AIDescriptionGeneratorService', () => {
   describe('generatePRDescription', () => {
     it('should generate PR description with Claude as primary provider', async () => {
       const mockResponse = {
-        content: [{ text: '{"title": "PROJ-123: Test feature implementation", "body": "## Summary\\nImplemented new test feature"}' }]
+        data: {
+          content: [{ text: '{"title": "PROJ-123: Test feature implementation", "body": "## Summary\\nImplemented new test feature"}' }]
+        }
       };
-      mockAxiosInstance.post.mockResolvedValue({ data: mockResponse });
+      mockAxiosInstance.post.mockResolvedValue(mockResponse);
 
       const result = await service.generatePRDescription(mockOptions);
 
@@ -131,11 +133,13 @@ describe('AIDescriptionGeneratorService', () => {
 
     it('should use selected AI provider without fallback', async () => {
       const mockResponse = {
-        content: [{
-          text: '{"title": "PROJ-123: Test feature", "body": "## Summary\\nTest implementation"}'
-        }]
+        data: {
+          content: [{
+            text: '{"title": "PROJ-123: Test feature", "body": "## Summary\\nTest implementation"}'
+          }]
+        }
       };
-      mockAxiosInstance.post.mockResolvedValue({ data: mockResponse });
+      mockAxiosInstance.post.mockResolvedValue(mockResponse);
 
       const result = await service.generatePRDescription(mockOptions);
 
@@ -145,9 +149,11 @@ describe('AIDescriptionGeneratorService', () => {
 
     it('should handle invalid JSON response gracefully', async () => {
       const mockResponse = {
-        content: [{ text: 'Invalid JSON response' }]
+        data: {
+          content: [{ text: 'Invalid JSON response' }]
+        }
       };
-      mockAxiosInstance.post.mockResolvedValue({ data: mockResponse });
+      mockAxiosInstance.post.mockResolvedValue(mockResponse);
 
       const result = await service.generatePRDescription(mockOptions);
 
@@ -174,12 +180,22 @@ describe('AIDescriptionGeneratorService', () => {
         }
       };
 
-      const mockResponse = {
-        content: [{
-          text: '{"title": "PROJ-123: Test feature implementation", "body": "## Summary\\nImplemented new test feature as part of PROJ-100: Epic: User Authentication System"}'
-        }]
+      const mockSummaryResponse = {
+        data: {
+          content: [{ text: 'Generated summary' }]
+        }
       };
-      mockAxiosInstance.post.mockResolvedValue({ data: mockResponse });
+      const mockDescriptionResponse = {
+        data: {
+          content: [{
+            text: '{"title": "PROJ-123: Test feature implementation", "body": "## Summary\\nImplemented new test feature as part of PROJ-100: Epic: User Authentication System"}'
+          }]
+        }
+      };
+      
+      mockAxiosInstance.post
+        .mockResolvedValueOnce(mockSummaryResponse)
+        .mockResolvedValueOnce(mockDescriptionResponse);
 
       const result = await service.generatePRDescription(mockOptionsWithParent);
 
@@ -195,12 +211,22 @@ describe('AIDescriptionGeneratorService', () => {
     });
 
     it('should not include parent ticket context when no parent ticket exists', async () => {
-      const mockResponse = {
-        content: [{
-          text: '{"title": "PROJ-123: Test feature implementation", "body": "## Summary\\nImplemented new test feature"}'
-        }]
+      const mockSummaryResponse = {
+        data: {
+          content: [{ text: 'Generated summary without parent' }]
+        }
       };
-      mockAxiosInstance.post.mockResolvedValue({ data: mockResponse });
+      const mockDescriptionResponse = {
+        data: {
+          content: [{
+            text: '{"title": "PROJ-123: Test feature implementation", "body": "## Summary\\nImplemented new test feature"}'
+          }]
+        }
+      };
+      
+      mockAxiosInstance.post
+        .mockResolvedValueOnce(mockSummaryResponse)
+        .mockResolvedValueOnce(mockDescriptionResponse);
 
       const result = await service.generatePRDescription(mockOptions);
 
@@ -518,11 +544,20 @@ describe('AIDescriptionGeneratorService', () => {
         }
       };
 
-      const mockResponse = {
-        content: [{ text: '{"title": "PROJ-123: Test", "body": "## Description\\nTest content\\n\\n## Testing\\n- [ ] Manual testing"}' }]
+      const mockSummaryResponse = {
+        data: {
+          content: [{ text: 'Generated summary with template' }]
+        }
+      };
+      const mockDescriptionResponse = {
+        data: {
+          content: [{ text: '{"title": "PROJ-123: Test", "body": "## Description\\nTest content\\n\\n## Testing\\n- [ ] Manual testing"}' }]
+        }
       };
 
-      mockAxiosInstance.post.mockResolvedValue({ data: mockResponse });
+      mockAxiosInstance.post
+        .mockResolvedValueOnce(mockSummaryResponse)
+        .mockResolvedValueOnce(mockDescriptionResponse);
 
       const result = await service.generatePRDescription(optionsWithTemplate);
 
@@ -533,13 +568,22 @@ describe('AIDescriptionGeneratorService', () => {
 
   describe('Response parsing', () => {
     it('should parse valid JSON response correctly', async () => {
-      const mockResponse = {
-        content: [{
-          text: '{"title": "PROJ-123: Valid JSON", "body": "## Summary\\nValid JSON response"}'
-        }]
+      const mockSummaryResponse = {
+        data: {
+          content: [{ text: 'Generated summary' }]
+        }
+      };
+      const mockDescriptionResponse = {
+        data: {
+          content: [{
+            text: '{"title": "PROJ-123: Valid JSON", "body": "## Summary\\nValid JSON response"}'
+          }]
+        }
       };
 
-      mockAxiosInstance.post.mockResolvedValue({ data: mockResponse });
+      mockAxiosInstance.post
+        .mockResolvedValueOnce(mockSummaryResponse)
+        .mockResolvedValueOnce(mockDescriptionResponse);
 
       const result = await service.generatePRDescription(mockOptions);
 
@@ -548,13 +592,22 @@ describe('AIDescriptionGeneratorService', () => {
     });
 
     it('should handle JSON wrapped in markdown code blocks', async () => {
-      const mockResponse = {
-        content: [{
-          text: '```json\n{"title": "PROJ-123: Markdown JSON", "body": "## Summary\\nJSON in markdown"}\n```'
-        }]
+      const mockSummaryResponse = {
+        data: {
+          content: [{ text: 'Generated summary' }]
+        }
+      };
+      const mockDescriptionResponse = {
+        data: {
+          content: [{
+            text: '```json\n{"title": "PROJ-123: Markdown JSON", "body": "## Summary\\nJSON in markdown"}\n```'
+          }]
+        }
       };
 
-      mockAxiosInstance.post.mockResolvedValue({ data: mockResponse });
+      mockAxiosInstance.post
+        .mockResolvedValueOnce(mockSummaryResponse)
+        .mockResolvedValueOnce(mockDescriptionResponse);
 
       const result = await service.generatePRDescription(mockOptions);
 
@@ -563,18 +616,291 @@ describe('AIDescriptionGeneratorService', () => {
     });
 
     it('should extract title from non-JSON response', async () => {
-      const mockResponse = {
-        content: [{
-          text: 'Title: PROJ-123: Extracted Title\n\nThis is the body content'
-        }]
+      const mockSummaryResponse = {
+        data: {
+          content: [{ text: 'Generated summary' }]
+        }
+      };
+      const mockDescriptionResponse = {
+        data: {
+          content: [{
+            text: 'Title: PROJ-123: Extracted Title\n\nThis is the body content'
+          }]
+        }
       };
 
-      mockAxiosInstance.post.mockResolvedValue({ data: mockResponse });
+      mockAxiosInstance.post
+        .mockResolvedValueOnce(mockSummaryResponse)
+        .mockResolvedValueOnce(mockDescriptionResponse);
 
       const result = await service.generatePRDescription(mockOptions);
 
       expect(result.title).toBe('PROJ-123: Extracted Title');
       expect(result.body).toContain('This is the body content');
+    });
+  });
+
+  describe('Confluence Integration', () => {
+    it('should include Confluence pages in summary generation prompt', async () => {
+      const mockOptionsWithConfluence = {
+        ...mockOptions,
+        jiraTicket: {
+          ...mockOptions.jiraTicket,
+          confluencePages: [
+            {
+              id: '123456',
+              title: 'Requirements Document',
+              content: 'This document outlines the user authentication requirements.',
+              url: 'https://company.atlassian.net/confluence/pages/viewpage.action?pageId=123456'
+            },
+            {
+              id: '789012',
+              title: 'API Specifications',
+              content: 'Authentication API endpoints and data models.',
+              url: 'https://company.atlassian.net/confluence/spaces/DEV/pages/789012/API+Specifications'
+            }
+          ]
+        }
+      };
+
+      const mockResponse = {
+        data: {
+          content: [{
+            text: 'Generated summary with Confluence context'
+          }]
+        }
+      };
+
+      mockAxiosInstance.post.mockResolvedValue(mockResponse);
+
+      // Call the private generateSummary method
+      const summary = await (service as any).generateSummary(mockOptionsWithConfluence);
+
+      expect(summary).toBe('Generated summary with Confluence context');
+
+      // Verify the prompt included Confluence content
+      const promptCall = mockAxiosInstance.post.mock.calls[0];
+      const requestData = promptCall[1];
+      expect(requestData.messages[0].content).toContain('Related Confluence Documentation');
+      expect(requestData.messages[0].content).toContain('Requirements Document');
+      expect(requestData.messages[0].content).toContain('This document outlines the user authentication requirements');
+      expect(requestData.messages[0].content).toContain('API Specifications');
+      expect(requestData.messages[0].content).toContain('Authentication API endpoints and data models');
+      expect(requestData.messages[0].content).toContain('incorporate insights from these Confluence pages');
+    });
+
+    it('should include Confluence content in buildPrompt', async () => {
+      const mockOptionsWithConfluence = {
+        ...mockOptions,
+        jiraTicket: {
+          ...mockOptions.jiraTicket,
+          confluencePages: [
+            {
+              id: '123456',
+              title: 'Technical Design',
+              content: 'Detailed technical design specifications.',
+              url: 'https://company.atlassian.net/confluence/pages/viewpage.action?pageId=123456'
+            }
+          ]
+        }
+      };
+
+      // Call the private buildPrompt method
+      const prompt = (service as any).buildPrompt(mockOptionsWithConfluence, 'Test summary');
+
+      expect(prompt).toContain('Related Confluence Documentation');
+      expect(prompt).toContain('Technical Design');
+      expect(prompt).toContain('Detailed technical design specifications');
+      expect(prompt).toContain('CRITICAL: Use the information from these Confluence pages');
+      expect(prompt).toContain('Validate that the code changes align with documented requirements');
+      expect(prompt).toContain('Reference relevant specifications or design decisions');
+    });
+
+    it('should generate PR description with Confluence context included', async () => {
+      const mockOptionsWithConfluence = {
+        ...mockOptions,
+        jiraTicket: {
+          ...mockOptions.jiraTicket,
+          confluencePages: [
+            {
+              id: '123456',
+              title: 'User Story Details',
+              content: 'Acceptance criteria and business requirements for user authentication.',
+              url: 'https://company.atlassian.net/confluence/pages/viewpage.action?pageId=123456'
+            }
+          ]
+        }
+      };
+
+      const mockSummaryResponse = {
+        data: {
+          content: [{
+            text: 'Authentication feature summary with Confluence insights'
+          }]
+        }
+      };
+
+      const mockDescriptionResponse = {
+        data: {
+          content: [{
+            text: JSON.stringify({
+              title: 'PROJ-123: Implement user authentication',
+              body: `## Summary
+Authentication feature implementation following Confluence requirements.
+
+## Changes
+- Added authentication middleware
+- Implemented user login/logout
+- Based on User Story Details from Confluence
+
+## Confluence References
+- User Story Details: Acceptance criteria and business requirements for user authentication`
+            })
+          }]
+        }
+      };
+
+      mockAxiosInstance.post
+        .mockResolvedValueOnce(mockSummaryResponse)
+        .mockResolvedValueOnce(mockDescriptionResponse);
+
+      const result = await service.generatePRDescription(mockOptionsWithConfluence);
+
+      expect(result.title).toBe('PROJ-123: Implement user authentication');
+      expect(result.body).toContain('following Confluence requirements');
+      expect(result.body).toContain('User Story Details');
+      expect(result.body).toContain('Acceptance criteria and business requirements');
+
+      // Verify both summary and buildPrompt calls included Confluence content
+      const summaryCall = mockAxiosInstance.post.mock.calls[0];
+      const descriptionCall = mockAxiosInstance.post.mock.calls[1];
+
+      expect(summaryCall[1].messages[0].content).toContain('Related Confluence Documentation');
+      expect(descriptionCall[1].messages[0].content).toContain('Related Confluence Documentation');
+    });
+
+    it('should handle empty Confluence pages gracefully', async () => {
+      const mockOptionsWithEmptyConfluence = {
+        ...mockOptions,
+        jiraTicket: {
+          ...mockOptions.jiraTicket,
+          confluencePages: []
+        }
+      };
+
+      const mockResponse = {
+        data: {
+          content: [{
+            text: 'Generated summary without Confluence'
+          }]
+        }
+      };
+
+      mockAxiosInstance.post.mockResolvedValue(mockResponse);
+
+      const summary = await (service as any).generateSummary(mockOptionsWithEmptyConfluence);
+
+      expect(summary).toBe('Generated summary without Confluence');
+
+      // Verify prompt doesn't include Confluence section
+      const promptCall = mockAxiosInstance.post.mock.calls[0];
+      const requestData = promptCall[1];
+      expect(requestData.messages[0].content).not.toContain('Related Confluence Documentation');
+    });
+
+    it('should handle undefined Confluence pages', async () => {
+      const mockOptionsWithoutConfluence = {
+        ...mockOptions,
+        jiraTicket: {
+          ...mockOptions.jiraTicket,
+          confluencePages: undefined
+        }
+      };
+
+      const mockResponse = {
+        data: {
+          content: [{
+            text: 'Generated summary without Confluence'
+          }]
+        }
+      };
+
+      mockAxiosInstance.post.mockResolvedValue(mockResponse);
+
+      const summary = await (service as any).generateSummary(mockOptionsWithoutConfluence);
+
+      expect(summary).toBe('Generated summary without Confluence');
+
+      // Verify prompt doesn't include Confluence section
+      const promptCall = mockAxiosInstance.post.mock.calls[0];
+      const requestData = promptCall[1];
+      expect(requestData.messages[0].content).not.toContain('Related Confluence Documentation');
+    });
+
+    it('should truncate long Confluence content appropriately', async () => {
+      const longContent = 'This is a very long content that repeats. '.repeat(100); // ~4200 chars
+      
+      const mockOptionsWithLongContent = {
+        ...mockOptions,
+        jiraTicket: {
+          ...mockOptions.jiraTicket,
+          confluencePages: [
+            {
+              id: '123456',
+              title: 'Long Document',
+              content: longContent,
+              url: 'https://company.atlassian.net/confluence/pages/viewpage.action?pageId=123456'
+            }
+          ]
+        }
+      };
+
+      const mockResponse = {
+        data: {
+          content: [{
+            text: 'Summary with truncated content'
+          }]
+        }
+      };
+
+      mockAxiosInstance.post.mockResolvedValue(mockResponse);
+
+      const summary = await (service as any).generateSummary(mockOptionsWithLongContent);
+
+      expect(summary).toBe('Summary with truncated content');
+
+      // Verify the content was included but reasonable length
+      const promptCall = mockAxiosInstance.post.mock.calls[0];
+      const requestData = promptCall[1];
+      const prompt = requestData.messages[0].content;
+      
+      expect(prompt).toContain('Long Document');
+      expect(prompt).toContain('This is a very long content');
+      // The total prompt should be reasonable, not 4200+ chars from Confluence alone
+      expect(prompt.length).toBeLessThan(15000);
+    });
+
+    it('should preserve Confluence URLs for reference', async () => {
+      const mockOptionsWithConfluence = {
+        ...mockOptions,
+        jiraTicket: {
+          ...mockOptions.jiraTicket,
+          confluencePages: [
+            {
+              id: '123456',
+              title: 'Architecture Guide',
+              content: 'System architecture and design patterns.',
+              url: 'https://company.atlassian.net/confluence/spaces/ARCH/pages/123456/Architecture+Guide'
+            }
+          ]
+        }
+      };
+
+      const prompt = (service as any).buildPrompt(mockOptionsWithConfluence);
+
+      expect(prompt).toContain('Architecture Guide');
+      expect(prompt).toContain('https://company.atlassian.net/confluence/spaces/ARCH/pages/123456/Architecture+Guide');
+      expect(prompt).toContain('Source: https://');
     });
   });
 });

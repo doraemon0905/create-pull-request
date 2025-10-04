@@ -14,7 +14,7 @@ class SimpleSpinner implements Spinner {
   private _isSpinning: boolean = false;
   private _interval: NodeJS.Timeout | null = null;
   private _spinnerIndex: number = 0;
-  private _spinnerFrames: string[] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  private readonly _spinnerFrames: string[] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
   get text(): string {
     return this._text;
@@ -35,13 +35,13 @@ class SimpleSpinner implements Spinner {
     if (text) {
       this._text = text;
     }
-    
+
     if (!this._isSpinning) {
       this._isSpinning = true;
       this._render(); // Initial render
       this._startSpinning();
     }
-    
+
     return this;
   }
 
@@ -84,23 +84,15 @@ class SimpleSpinner implements Spinner {
 
   private _render(): void {
     if (!this._isSpinning) return;
-    
-    try {
-      this._clearLine();
-      const frame = this._spinnerFrames[this._spinnerIndex];
-      process.stdout.write(`${chalk.cyan(frame)} ${this._text}`);
-    } catch (_error) {
-      // Silently handle write errors to prevent spinner from crashing
-    }
+
+    this._clearLine();
+    const frame = this._spinnerFrames[this._spinnerIndex];
+    process.stdout.write(`${chalk.cyan(frame)} ${this._text}`);
   }
 
   private _clearLine(): void {
-    try {
-      if (process.stdout.isTTY) {
-        process.stdout.write('\r\x1b[K');
-      }
-    } catch (_error) {
-      // Silently handle write errors to prevent spinner from crashing
+    if (process.stdout.isTTY) {
+      process.stdout.write('\r\x1b[K');
     }
   }
 }

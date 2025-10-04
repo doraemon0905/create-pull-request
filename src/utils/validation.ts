@@ -79,8 +79,13 @@ export function sanitizeInput(input: string): string {
   }
 
   return input
-    .replace(/[<>]/g, '') // Remove potential HTML tags
-    .replace(/[&"']/g, '') // Remove potentially dangerous characters
-    .replace(/[\r\n\t]/g, ' ') // Replace newlines and tabs with spaces
+    .replaceAll('<', '') // Remove potential HTML tags
+    .replaceAll('>', '') // Remove potential HTML tags
+    .replaceAll('&', '') // Remove potentially dangerous characters
+    .replaceAll('"', '') // Remove potentially dangerous characters
+    .replaceAll("'", '') // Remove potentially dangerous characters
+    .replaceAll('\r', ' ') // Replace carriage returns with spaces
+    .replaceAll('\n', ' ') // Replace newlines with spaces
+    .replaceAll('\t', ' ') // Replace tabs with spaces
     .trim(); // Remove leading/trailing whitespace
 }

@@ -51,7 +51,7 @@ export async function createPullRequest(options: CreatePROptions): Promise<void>
     // Get current branch first to potentially extract Jira ticket from it
     spinner.start('Analyzing repository and changes...');
     const currentBranch = await gitService.getCurrentBranch();
-    
+
     // Get Jira ticket - try to extract from branch name if not provided
     let jiraTicket = options.jira;
     if (!jiraTicket) {
@@ -86,13 +86,47 @@ export async function createPullRequest(options: CreatePROptions): Promise<void>
       throw new Error(`Invalid Jira ticket format: ${jiraTicket}. Expected format: PROJECT-123`);
     }
 
-    // Fetch Jira ticket information
+    // Fetch Jira ticket information (without Confluence pages initially)
     spinner.text = 'Fetching Jira ticket information...';
-    const ticketInfo = await jiraService.getTicket(jiraTicket!);
-    spinner.text = 'Analyzing repository and changes...';
-    
+    let ticketInfo = await jiraService.getTicket(jiraTicket!);
+    spinner.succeed('Jira ticket information fetched');
+
+    console.log(chalk.green(`🎫 Using Jira ticket: ${ticketInfo.key} - ${ticketInfo.summary}`));
+
+    // Check for Confluence pages and ask user if they want to include them
+    spinner.start('Checking for linked Confluence pages...');
+    const hasConfluence = await jiraService.hasConfluencePages(jiraTicket!);
+
+    if (hasConfluence) {
+      spinner.succeed('Found linked Confluence pages');
+      const { includeConfluence } = await inquirer.prompt([{
+        type: 'confirm',
+        name: 'includeConfluence',
+        message: 'Include Confluence page content in PR summary generation?',
+        default: false
+      }]);
+
+      if (includeConfluence) {
+        spinner.start('Fetching Confluence pages content...');
+        ticketInfo = await jiraService.getTicket(jiraTicket!, true);
+        spinner.succeed(`Loaded ${ticketInfo.confluencePages?.length || 0} Confluence page(s)`);
+
+        if (ticketInfo.confluencePages && ticketInfo.confluencePages.length > 0) {
+          console.log(chalk.blue('📄 Confluence pages found:'));
+          for (const page of ticketInfo.confluencePages) {
+            console.log(chalk.blue(`   • ${page.title}`));
+          }
+        }
+      } else {
+        console.log(chalk.yellow('⏭️  Skipping Confluence content'));
+      }
+    } else {
+      spinner.succeed('No Confluence pages linked to this ticket');
+    }
+
+    spinner.start('Analyzing repository and changes...');
     const baseBranch = options.base || CONFIG.DEFAULT_BRANCH;
-    
+
     // Validate base branch exists
     const baseExists = await gitService.branchExists(baseBranch);
     if (!baseExists) {
@@ -103,8 +137,6 @@ export async function createPullRequest(options: CreatePROptions): Promise<void>
     const gitChanges = await gitService.getChanges(baseBranch, true);
     const repo = await githubService.getCurrentRepo();
     spinner.succeed(`Repository: ${repo.owner}/${repo.repo}, Branch: ${currentBranch}`);
-    
-    console.log(chalk.green(`🎫 Using Jira ticket: ${ticketInfo.key} - ${ticketInfo.summary}`));
 
     if (gitChanges.totalFiles === 0) {
       throw new Error(`No changes detected between '${baseBranch}' and '${currentBranch}'`);
@@ -231,14 +263,14 @@ export async function createPullRequest(options: CreatePROptions): Promise<void>
 
     // Show generated content for review
     console.log(chalk.blue('\n📝 Generated Pull Request:'));
-    
+
     // Display summary if available
     if (generatedContent.summary) {
       console.log(chalk.bold('Summary:'));
       console.log(chalk.cyan(generatedContent.summary));
       console.log();
     }
-    
+
     console.log(chalk.bold('Title:'));
     console.log(generatedContent.title);
     console.log(chalk.bold('\nDescription:'));
@@ -338,13 +370,13 @@ export async function createPullRequest(options: CreatePROptions): Promise<void>
       }
 
       spinner.start('Creating or updating pull request on GitHub...');
-      
+
       // Ensure current branch is pushed to remote
       spinner.start('Ensuring branch is pushed to remote...');
       await gitService.pushCurrentBranch();
-      
+
       spinner.start('Creating or updating pull request on GitHub...');
-      
+
       const result = await githubService.createOrUpdatePullRequest(repo, {
         title: finalTitle.trim(),
         body: finalBody.trim(),
@@ -357,9 +389,9 @@ export async function createPullRequest(options: CreatePROptions): Promise<void>
       const isUpdate = result.isUpdate;
       const draftText = options.draft ? ' draft' : '';
       const actionText = isUpdate ? 'updated' : 'created';
-      
+
       spinner.succeed(`Pull request${draftText} ${actionText} successfully!`);
-      
+
       console.log(chalk.green(`\n🎉${options.draft ? ' Draft' : ''} Pull Request ${isUpdate ? 'Updated' : 'Created'}:`));
       console.log(chalk.bold('URL:'), pullRequest.html_url);
       console.log(chalk.bold('Number:'), `#${pullRequest.number}`);
